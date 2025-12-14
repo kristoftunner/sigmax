@@ -50,9 +50,6 @@ target_compile_features(sigmax_options INTERFACE cxx_std_${CMAKE_CXX_STANDARD})
 add_library(sigmax::sigmax_options ALIAS sigmax_options)
 add_library(sigmax::sigmax_warnings ALIAS sigmax_warnings)
 
-#add_library(sigmax::sigmax_options INTERFACE IMPORTED)
-#add_library(sigmax::sigmax_warnings INTERFACE IMPORTED)
-
 # configure files based on CMake configuration options
 add_subdirectory(configured_files)
 

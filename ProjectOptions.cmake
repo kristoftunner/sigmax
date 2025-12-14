@@ -6,7 +6,7 @@ include(CheckCXXCompilerFlag)
 include(CheckCXXSourceCompiles)
 
 macro(sigmax_supports_sanitizers)
-    if((CMAKE_CXX_COMPILER_ID MATCHES ".*Clang.*" OR CMAKE_CXX_COMPILER_ID MATCHES ".*GNU.*") AND NOT WIN32)
+    if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang.*" OR CMAKE_CXX_COMPILER_ID MATCHES ".*GNU.*")
 
         message(STATUS "Sanity checking UndefinedBehaviorSanitizer, it should be supported on this platform")
         set(TEST_PROGRAM "int main() { return 0; }")
@@ -27,28 +27,20 @@ macro(sigmax_supports_sanitizers)
         set(SUPPORTS_UBSAN OFF)
     endif()
 
-    if((CMAKE_CXX_COMPILER_ID MATCHES ".*Clang.*" OR CMAKE_CXX_COMPILER_ID MATCHES ".*GNU.*") AND WIN32)
-        set(SUPPORTS_ASAN OFF)
+    message(STATUS "Sanity checking AddressSanitizer, it should be supported on this platform")
+    set(TEST_PROGRAM "int main() { return 0; }")
+
+    # Check if AddressSanitizer works at link time
+    set(CMAKE_REQUIRED_FLAGS "-fsanitize=address")
+    set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=address")
+    check_cxx_source_compiles("${TEST_PROGRAM}" HAS_ASAN_LINK_SUPPORT)
+
+    if(HAS_ASAN_LINK_SUPPORT)
+        message(STATUS "AddressSanitizer is supported at both compile and link time.")
+        set(SUPPORTS_ASAN ON)
     else()
-        if(NOT WIN32)
-            message(STATUS "Sanity checking AddressSanitizer, it should be supported on this platform")
-            set(TEST_PROGRAM "int main() { return 0; }")
-
-            # Check if AddressSanitizer works at link time
-            set(CMAKE_REQUIRED_FLAGS "-fsanitize=address")
-            set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=address")
-            check_cxx_source_compiles("${TEST_PROGRAM}" HAS_ASAN_LINK_SUPPORT)
-
-            if(HAS_ASAN_LINK_SUPPORT)
-                message(STATUS "AddressSanitizer is supported at both compile and link time.")
-                set(SUPPORTS_ASAN ON)
-            else()
-                message(WARNING "AddressSanitizer is NOT supported at link time.")
-                set(SUPPORTS_ASAN OFF)
-            endif()
-        else()
-            set(SUPPORTS_ASAN ON)
-        endif()
+        message(WARNING "AddressSanitizer is NOT supported at link time.")
+        set(SUPPORTS_ASAN OFF)
     endif()
 endmacro()
 
@@ -64,6 +56,8 @@ macro(sigmax_setup_options)
 
     sigmax_supports_sanitizers()
 
+    message("PROJECT_IS_TOP_LEVEL is: ${PROJECT_IS_TOP_LEVEL}")
+    message("sigmax_PACKAGING_MAINTAINER_MODE is: ${sigmax_PACKAGING_MAINTAINER_MODE}")
     if(NOT PROJECT_IS_TOP_LEVEL OR sigmax_PACKAGING_MAINTAINER_MODE)
         option(sigmax_ENABLE_IPO "Enable IPO/LTO" OFF)
         option(sigmax_WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
@@ -80,7 +74,7 @@ macro(sigmax_setup_options)
         option(sigmax_ENABLE_CACHE "Enable ccache" OFF)
     else()
         option(sigmax_ENABLE_IPO "Enable IPO/LTO" ON)
-        option(sigmax_WARNINGS_AS_ERRORS "Treat Warnings As Errors" ON)
+        option(sigmax_WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
         option(sigmax_ENABLE_USER_LINKER "Enable user-selected linker" OFF)
         option(sigmax_ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" ${SUPPORTS_ASAN})
         option(sigmax_ENABLE_SANITIZER_LEAK "Enable leak sanitizer" OFF)
@@ -88,7 +82,7 @@ macro(sigmax_setup_options)
         option(sigmax_ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
         option(sigmax_ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" OFF)
         option(sigmax_ENABLE_UNITY_BUILD "Enable unity builds" OFF)
-        option(sigmax_ENABLE_CLANG_TIDY "Enable clang-tidy" ON)
+        option(sigmax_ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
         option(sigmax_ENABLE_CPPCHECK "Enable cpp-check analysis" ON)
         option(sigmax_ENABLE_PCH "Enable precompiled headers" OFF)
         option(sigmax_ENABLE_CACHE "Enable ccache" ON)
@@ -162,7 +156,6 @@ macro(sigmax_local_options)
     sigmax_set_project_warnings(
         sigmax_warnings
         ${sigmax_WARNINGS_AS_ERRORS}
-        ""
         ""
         ""
         "")

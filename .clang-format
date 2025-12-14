@@ -1,4 +1,4 @@
-AccessModifierOffset: 4
+AccessModifierOffset: -4
 AlignAfterOpenBracket: DontAlign
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false

@@ -7,4 +7,5 @@ target_sources(sigmax PRIVATE
 target_sources(sigmax PUBLIC
   order_type.hpp
   database.hpp
+  instruments.hpp
 )
