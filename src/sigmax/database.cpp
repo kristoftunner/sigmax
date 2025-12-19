@@ -2,12 +2,14 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <mutex>
 
 #include "instruments.hpp"
 
 namespace sigmax {
 DBErrorType DataBase::UpdateDb(const Order &&order)
 {
+    const std::lock_guard lockGuard(m_dbLock);
     // insert the order into the orders
     if (m_orders.find(order.instrumentId) != m_orders.end()) {
         m_orders[order.instrumentId].emplace_back(order);
