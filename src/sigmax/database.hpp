@@ -3,8 +3,8 @@
 #include <filesystem>
 #include <functional>
 #include <map>
-#include <vector>
 #include <mutex>
+#include <vector>
 
 #include "order_type.hpp"
 
@@ -23,7 +23,7 @@ public:
     std::expected<const std::vector<Order>, DBErrorType>
         GetOrders(const std::string &instrumentId, const Timestamp start, const Timestamp end);
 
-    DBErrorType AppendCallbackFn(std::function<void(const Order& order)>);
+    DBErrorType AppendCallbackFn(std::function<void(const Order &order)>);
 
 private:
     std::vector<std::function<void(const Order &order)>> m_algoCallbackFns;
