@@ -18,16 +18,16 @@ public:
     DBErrorType UpdateDb(const Order &&order);
     DBErrorType SaveDbToFile(const std::filesystem::path &filePath);
     // one-copy DB read functions
-    std::expected<const std::vector<Order>, DBErrorType> GetOrders(const std::string &instrumentId);
-    std::expected<const std::vector<Order>, DBErrorType> GetOrders(const OrderId orderId);
+    std::expected<const std::vector<Order>, DBErrorType> GetOrders(const InstrumentId &instrumentId);
     std::expected<const std::vector<Order>, DBErrorType>
-        GetOrders(const std::string &instrumentId, const Timestamp start, const Timestamp end);
+        GetOrders(const InstrumentId &instrumentId, const Timestamp start, const Timestamp end);
 
     DBErrorType AppendCallbackFn(std::function<void(const Order &order)>);
 
 private:
     std::vector<std::function<void(const Order &order)>> m_algoCallbackFns;
-    std::map<std::string, std::vector<Order>> m_orders;
-    std::mutex m_dbLock;
+    // TODO: improve the perf using an isntrument id enum and vectors instead of maps
+    std::map<InstrumentId, std::vector<Order>> m_orders;
+    std::map<InstrumentId, std::mutex> m_instrumentLocks;
 };
 }// namespace sigmax

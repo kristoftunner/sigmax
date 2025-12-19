@@ -5,17 +5,19 @@
 #include <mutex>
 
 #include "instruments.hpp"
+#include "order_type.hpp"
 
 namespace sigmax {
 DBErrorType DataBase::UpdateDb(const Order &&order)
 {
     const std::lock_guard lockGuard(m_dbLock);
     // insert the order into the orders
-    if (m_orders.find(order.instrumentId) != m_orders.end()) {
+    if (m_orders.contains(order.instrumentId)) {
         m_orders[order.instrumentId].emplace_back(order);
 
     } else {
         m_orders[order.instrumentId] = { order };
+        m_instrumentLocks[order.instrumentId] = std::mutex();
     }
     // sort the orders by timestamp
     std::sort(m_orders[order.instrumentId].begin(), m_orders[order.instrumentId].end(), [](const Order &lhs, const Order &rhs) {
@@ -33,7 +35,7 @@ DBErrorType DataBase::SaveDbToFile(const std::filesystem::path &filePath)
     }
 }
 
-std::expected<const std::vector<Order>, DBErrorType> DataBase::GetOrders(const std::string &instrumentId)
+std::expected<const std::vector<Order>, DBErrorType> DataBase::GetOrders(const InstrumentId &instrumentId)
 {
     if (!m_orders.contains(instrumentId)) {
         return std::unexpected(DBErrorType::INSTRUMENT_NOT_FOUND);
@@ -41,21 +43,9 @@ std::expected<const std::vector<Order>, DBErrorType> DataBase::GetOrders(const s
         return m_orders[instrumentId];
     }
 }
-std::expected<const std::vector<Order>, DBErrorType> DataBase::GetOrders(const OrderId orderId)
-{
-    if (auto it = g_instrumentMap.find(orderId); it != g_instrumentMap.end()) {
-        const auto instrumentId = it->second;
-        if (!m_orders.contains(instrumentId)) {
-            return std::unexpected(DBErrorType::INSTRUMENT_NOT_FOUND);
-        } else {
-            return m_orders[instrumentId];
-        }
-    } else {
-        return std::unexpected(DBErrorType::INSTRUMENT_NOT_FOUND);
-    }
-}
+
 std::expected<const std::vector<Order>, DBErrorType>
-    DataBase::GetOrders(const std::string &instrumentId, const Timestamp start, const Timestamp end)
+    DataBase::GetOrders(const InstrumentId &instrumentId, const Timestamp start, const Timestamp end)
 {
     if (!m_orders.contains(instrumentId)) {
         return std::unexpected(DBErrorType::INSTRUMENT_NOT_FOUND);
