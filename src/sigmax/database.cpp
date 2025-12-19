@@ -10,20 +10,22 @@
 namespace sigmax {
 DBErrorType DataBase::UpdateDb(const Order &&order)
 {
-    const std::lock_guard lockGuard(m_dbLock);
-    // insert the order into the orders
-    if (m_orders.contains(order.instrumentId)) {
+    // this will cause a very low-occurence concurrency issue:
+    // what happens if an instrument is introduced during the contains function call?
+    if (m_orders.contains(order.instrumentId) && m_instrumentLocks.contains(order.instrumentId)) {
+        const std::lock_guard<std::mutex> lock(m_instrumentLocks[order.instrumentId]);
         m_orders[order.instrumentId].emplace_back(order);
+        // sort the orders by timestamp
+        std::sort(m_orders[order.instrumentId].begin(), m_orders[order.instrumentId].end(), [](const Order &lhs, const Order &rhs) {
+            return lhs.ts < rhs.ts;
+        });
 
     } else {
         m_orders[order.instrumentId] = { order };
-        m_instrumentLocks[order.instrumentId] = std::mutex();
+        m_instrumentLocks.try_emplace(order.instrumentId);
     }
-    // sort the orders by timestamp
-    std::sort(m_orders[order.instrumentId].begin(), m_orders[order.instrumentId].end(), [](const Order &lhs, const Order &rhs) {
-        return lhs.ts < rhs.ts;
-    });
 
+    // no meaningful error is catched at this point
     return DBErrorType::SUCCESS;
 }
 DBErrorType DataBase::SaveDbToFile(const std::filesystem::path &filePath)
@@ -37,9 +39,11 @@ DBErrorType DataBase::SaveDbToFile(const std::filesystem::path &filePath)
 
 std::expected<const std::vector<Order>, DBErrorType> DataBase::GetOrders(const InstrumentId &instrumentId)
 {
-    if (!m_orders.contains(instrumentId)) {
+    if (!m_orders.contains(instrumentId) || !m_instrumentLocks.contains(instrumentId)) {
         return std::unexpected(DBErrorType::INSTRUMENT_NOT_FOUND);
     } else {
+        // lock for the copy operation
+        const std::lock_guard<std::mutex> lock(m_instrumentLocks[instrumentId]);
         return m_orders[instrumentId];
     }
 }
@@ -47,9 +51,11 @@ std::expected<const std::vector<Order>, DBErrorType> DataBase::GetOrders(const I
 std::expected<const std::vector<Order>, DBErrorType>
     DataBase::GetOrders(const InstrumentId &instrumentId, const Timestamp start, const Timestamp end)
 {
-    if (!m_orders.contains(instrumentId)) {
+    if (!m_orders.contains(instrumentId) || !m_instrumentLocks.contains(instrumentId)) {
         return std::unexpected(DBErrorType::INSTRUMENT_NOT_FOUND);
     } else {
+        const std::lock_guard<std::mutex> lock(m_instrumentLocks[instrumentId]);
+
         std::vector<Order> ret;
         const std::vector<Order> &orders = m_orders[instrumentId];
         const auto startOrder = std::lower_bound(

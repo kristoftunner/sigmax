@@ -3,6 +3,4 @@
 
 #include "order_type.hpp"
 
-namespace sigmax {
-
-}// namespace sigmax
+namespace sigmax {}// namespace sigmax
