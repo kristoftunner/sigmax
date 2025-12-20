@@ -1,8 +1,7 @@
 #include "log.hpp"
 #include "spdlog/sinks/stdout_color_sinks.h"
 
-namespace sigmax
-{
+namespace sigmax {
 std::shared_ptr<spdlog::logger> Logger::s_logger;
 
 void Logger::Init()
@@ -11,4 +10,4 @@ void Logger::Init()
     s_logger = spdlog::stdout_color_mt("core");
     s_logger->set_level(spdlog::level::info);
 }
-} // namespace medicimage
+}// namespace sigmax
