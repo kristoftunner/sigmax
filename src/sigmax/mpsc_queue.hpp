@@ -5,8 +5,6 @@
 #include <expected>
 #include <vector>
 
-#include <boost/beast/core/span.hpp>
-
 #include "log.hpp"
 
 namespace sigmax {
@@ -17,6 +15,11 @@ template<typename T, int C> class MpscQueue
 public:
     enum class QueueError : std::uint8_t { QUEUE_IS_EMPTY, QUEUE_IS_FULL };
     explicit MpscQueue(const int size) : m_data(size) {}
+    std::size_t Size()
+    {
+        // TODO: fix this
+        return m_head - m_tail;
+    }
     /// \brief pushing back a single element
     void PushBack(const T &element)
     {

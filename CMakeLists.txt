@@ -64,6 +64,7 @@ endif()
 
 # Adding the tests:
 include(CTest)
+enable_testing()
 
 if(BUILD_TESTING)
     message(AUTHOR_WARNING "Building Tests. Be sure to check out test/constexpr_tests.cpp for constexpr testing")

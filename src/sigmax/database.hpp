@@ -26,7 +26,7 @@ public:
     DBErrorType AppendCallbackFn(std::function<void(const Order &order)>);
 
 private:
-    static constexpr int kInputQueueSize{1024};
+    static constexpr int kInputQueueSize{ 1024 };
     std::vector<std::function<void(const Order &order)>> m_algoCallbackFns;
     // TODO: improve the perf using an isntrument id enum and vectors instead of maps
     std::map<InstrumentId, std::vector<Order>> m_orders;

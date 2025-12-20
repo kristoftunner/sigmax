@@ -4,7 +4,6 @@ target_link_libraries(sigmax
   PRIVATE 
   sigmax_options 
   sigmax_warnings 
-  Boost::boost
   spdlog::spdlog
 )
 
