@@ -5,6 +5,7 @@
 #include <mutex>
 
 #include "instruments.hpp"
+#include "mpsc_queue.hpp"
 #include "order_type.hpp"
 
 namespace sigmax {

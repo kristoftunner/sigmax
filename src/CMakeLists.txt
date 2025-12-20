@@ -1,6 +1,11 @@
 add_library(sigmax STATIC)
 add_library(sigmax::sigmax ALIAS sigmax)
-target_link_libraries(sigmax PRIVATE sigmax_options sigmax_warnings)
+target_link_libraries(sigmax 
+  PRIVATE 
+  sigmax_options 
+  sigmax_warnings 
+  spdlog::spdlog
+)
 
 target_include_directories(sigmax ${WARNING_GUARD} PUBLIC 
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/sigmax>

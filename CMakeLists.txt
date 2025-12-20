@@ -57,12 +57,14 @@ add_subdirectory(configured_files)
 add_subdirectory(src)
 
 # Don't even look at tests if we're not top level
+message(STATUS "PROJECT_IS_TOP_LEVEL: ${PROJECT_IS_TOP_LEVEL}")
 if(NOT PROJECT_IS_TOP_LEVEL)
     return()
 endif()
 
 # Adding the tests:
 include(CTest)
+enable_testing()
 
 if(BUILD_TESTING)
     message(AUTHOR_WARNING "Building Tests. Be sure to check out test/constexpr_tests.cpp for constexpr testing")

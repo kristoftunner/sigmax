@@ -6,6 +6,7 @@
 #include <mutex>
 #include <vector>
 
+#include "mpsc_queue.hpp"
 #include "order_type.hpp"
 
 namespace sigmax {
@@ -25,9 +26,11 @@ public:
     DBErrorType AppendCallbackFn(std::function<void(const Order &order)>);
 
 private:
+    static constexpr int kInputQueueSize{ 1024 };
     std::vector<std::function<void(const Order &order)>> m_algoCallbackFns;
     // TODO: improve the perf using an isntrument id enum and vectors instead of maps
     std::map<InstrumentId, std::vector<Order>> m_orders;
     std::map<InstrumentId, std::mutex> m_instrumentLocks;
+    MpscQueue<Order, kInputQueueSize> m_queue;
 };
 }// namespace sigmax
