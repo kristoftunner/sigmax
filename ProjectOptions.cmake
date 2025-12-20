@@ -60,7 +60,7 @@ macro(sigmax_setup_options)
     message("sigmax_PACKAGING_MAINTAINER_MODE is: ${sigmax_PACKAGING_MAINTAINER_MODE}")
     if(NOT PROJECT_IS_TOP_LEVEL OR sigmax_PACKAGING_MAINTAINER_MODE)
         option(sigmax_ENABLE_IPO "Enable IPO/LTO" OFF)
-        option(sigmax_WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
+        option(sigmax_WARNINGS_AS_ERRORS "Treat Warnings As Errors" ON)
         option(sigmax_ENABLE_USER_LINKER "Enable user-selected linker" OFF)
         option(sigmax_ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" OFF)
         option(sigmax_ENABLE_SANITIZER_LEAK "Enable leak sanitizer" OFF)
@@ -70,11 +70,10 @@ macro(sigmax_setup_options)
         option(sigmax_ENABLE_UNITY_BUILD "Enable unity builds" OFF)
         option(sigmax_ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
         option(sigmax_ENABLE_CPPCHECK "Enable cpp-check analysis" OFF)
-        option(sigmax_ENABLE_PCH "Enable precompiled headers" OFF)
         option(sigmax_ENABLE_CACHE "Enable ccache" OFF)
     else()
         option(sigmax_ENABLE_IPO "Enable IPO/LTO" ON)
-        option(sigmax_WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
+        option(sigmax_WARNINGS_AS_ERRORS "Treat Warnings As Errors" ON)
         option(sigmax_ENABLE_USER_LINKER "Enable user-selected linker" OFF)
         option(sigmax_ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" ${SUPPORTS_ASAN})
         option(sigmax_ENABLE_SANITIZER_LEAK "Enable leak sanitizer" OFF)
@@ -82,11 +81,27 @@ macro(sigmax_setup_options)
         option(sigmax_ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
         option(sigmax_ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" OFF)
         option(sigmax_ENABLE_UNITY_BUILD "Enable unity builds" OFF)
-        option(sigmax_ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
+        option(sigmax_ENABLE_CLANG_TIDY "Enable clang-tidy" ON)
         option(sigmax_ENABLE_CPPCHECK "Enable cpp-check analysis" ON)
-        option(sigmax_ENABLE_PCH "Enable precompiled headers" OFF)
         option(sigmax_ENABLE_CACHE "Enable ccache" ON)
     endif()
+
+    # print all selected options:
+    message("--------------------------------")
+    message("-- Selected options:")
+    message("-- sigmax_ENABLE_IPO: ${sigmax_ENABLE_IPO}")
+    message("-- sigmax_WARNINGS_AS_ERRORS: ${sigmax_WARNINGS_AS_ERRORS}")
+    message("-- sigmax_ENABLE_USER_LINKER: ${sigmax_ENABLE_USER_LINKER}")
+    message("-- sigmax_ENABLE_SANITIZER_ADDRESS: ${sigmax_ENABLE_SANITIZER_ADDRESS}")
+    message("-- sigmax_ENABLE_SANITIZER_LEAK: ${sigmax_ENABLE_SANITIZER_LEAK}")
+    message("-- sigmax_ENABLE_SANITIZER_UNDEFINED: ${sigmax_ENABLE_SANITIZER_UNDEFINED}")
+    message("-- sigmax_ENABLE_SANITIZER_THREAD: ${sigmax_ENABLE_SANITIZER_THREAD}")
+    message("-- sigmax_ENABLE_SANITIZER_MEMORY: ${sigmax_ENABLE_SANITIZER_MEMORY}")
+    message("-- sigmax_ENABLE_UNITY_BUILD: ${sigmax_ENABLE_UNITY_BUILD}")
+    message("-- sigmax_ENABLE_CLANG_TIDY: ${sigmax_ENABLE_CLANG_TIDY}")
+    message("-- sigmax_ENABLE_CPPCHECK: ${sigmax_ENABLE_CPPCHECK}")
+    message("-- sigmax_ENABLE_COVERAGE: ${sigmax_ENABLE_COVERAGE}")
+    message("-- sigmax_ENABLE_CACHE: ${sigmax_ENABLE_CACHE}")
 
     if(NOT PROJECT_IS_TOP_LEVEL)
         mark_as_advanced(
@@ -102,7 +117,6 @@ macro(sigmax_setup_options)
             sigmax_ENABLE_CLANG_TIDY
             sigmax_ENABLE_CPPCHECK
             sigmax_ENABLE_COVERAGE
-            sigmax_ENABLE_PCH
             sigmax_ENABLE_CACHE)
     endif()
 
@@ -175,15 +189,6 @@ macro(sigmax_local_options)
         ${sigmax_ENABLE_SANITIZER_MEMORY})
 
     set_target_properties(sigmax_options PROPERTIES UNITY_BUILD ${sigmax_ENABLE_UNITY_BUILD})
-
-    if(sigmax_ENABLE_PCH)
-        target_precompile_headers(
-            sigmax_options
-            INTERFACE
-            <vector>
-            <string>
-            <utility>)
-    endif()
 
     if(sigmax_ENABLE_CACHE)
         include(cmake/Cache.cmake)

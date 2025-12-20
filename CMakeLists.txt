@@ -57,6 +57,7 @@ add_subdirectory(configured_files)
 add_subdirectory(src)
 
 # Don't even look at tests if we're not top level
+message(STATUS "PROJECT_IS_TOP_LEVEL: ${PROJECT_IS_TOP_LEVEL}")
 if(NOT PROJECT_IS_TOP_LEVEL)
     return()
 endif()

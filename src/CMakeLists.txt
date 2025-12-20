@@ -5,6 +5,7 @@ target_link_libraries(sigmax
   sigmax_options 
   sigmax_warnings 
   Boost::boost
+  spdlog::spdlog
 )
 
 target_include_directories(sigmax ${WARNING_GUARD} PUBLIC 
