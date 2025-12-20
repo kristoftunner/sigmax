@@ -32,4 +32,6 @@ function(sigmax_setup_dependencies)
         cpmaddpackage("gh:lefticus/tools#update_build_system")
     endif()
 
+    find_package(Boost REQUIRED)
+
 endfunction()
