@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 
 namespace sigmax {
+// TODO: create a logger for each module at some point
 class Logger
 {
 public:

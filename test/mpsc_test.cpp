@@ -45,4 +45,29 @@ TEST_F(MpscQueueTest, FillAndFlush) {
         EXPECT_EQ(values[i], i);
     }
 }
+
+TEST_F(MpscQueueTest, Overflow) {
+    // overflow 1
+    MpscQueue<int, 10> queue;
+    for (int i = 0; i < 11; i++) {
+        queue.PushBack(i);
+    }
+    EXPECT_EQ(queue.Size(), 10);
+    auto values = queue.Flush();
+    EXPECT_EQ(values.size(), 10);
+    for (int i = 0; i < 10; i++) {
+        EXPECT_EQ(values[i], i + 1);
+    }
+
+    // overflow twice
+    for (int i = 0; i < 22; i++) {
+        queue.PushBack(i);
+    }
+    EXPECT_EQ(queue.Size(), 10);
+    values = queue.Flush();
+    EXPECT_EQ(values.size(), 10);
+    for (int i = 0; i < 10; i++) {
+        EXPECT_EQ(values[i], i + 12);
+    }
+}
 }// namespace sigmax

@@ -24,14 +24,18 @@ public:
     {
         const std::size_t newHead = (m_head + 1) % m_data.size();
         m_data[m_head] = element;
-        m_head = newHead;
-        if (m_tail == newHead) {
+        if ((m_size != 0) && (m_tail == m_head)) {
             // new tail is one after the head -> we lost the oldest data in the queue
             m_tail = (m_tail + 1) % m_data.size();
-            Logger::Warn("Head reached tail, queue is full");
+            Logger::Warn("[MPSC] - Head reached tail, queue is full");
+        }
+        m_head = newHead;
+        if(m_size == m_data.size())
+        {
+            Logger::Warn("[MPSC] - Element is lost, queue is full");
         }
         else {
-            m_size++;
+        m_size++;
         }
     }
     /// \brief pushing back multiple elements to the queue
@@ -52,25 +56,24 @@ public:
     {
         // the head is bigger than tail -> contiguous vector copy
         // head is smaller than tail -> ringbuffer turned over the contiguous vector
-        // head equals to tail -> no pop
-        if (m_head == m_tail) {
-            m_size = 0;
-            return {};
-        } else if (m_head > m_tail) {
-            std::vector<T> ret(m_data.begin() + m_tail, m_data.begin() + m_head);
-            m_head = static_cast<int>(m_tail);
-            m_size = 0;
-            return std::move(ret);
-        } else if (m_head < m_tail) {
+        std::vector<T> ret(m_size);
+        if(((m_head == m_tail) && (m_head != 0)) || (m_head < m_tail)) {
             // assuming that the data is from tail -> end of the vector -> beginning -> head
-            std::vector<T> ret(m_size);
             const std::size_t tailToEnd = m_data.size() - m_tail;
             std::memcpy(ret.data(), m_data.data() + m_tail, tailToEnd * sizeof(T));
             std::memcpy(ret.data() + tailToEnd, m_data.data(), m_head * sizeof(T));
-            m_head = static_cast<int>(m_tail);
-            m_size = 0;
-            return ret;
         }
+        else if((m_head == m_tail) && (m_head == 0)) {
+            std::memcpy(ret.data(), m_data.data(), m_size * sizeof(T));
+        }
+        else if (m_head > m_tail) {
+            std::memcpy(ret.data(), m_data.data() + m_tail, (m_head - m_tail) * sizeof(T));
+        }
+
+        m_head = 0;
+        m_tail = 0;
+        m_size = 0;
+        return ret;
     }
 
 private:
