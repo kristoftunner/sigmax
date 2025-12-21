@@ -44,9 +44,22 @@ TEST_F(MpscQueueTest, FillAndFlush) {
     for (int i = 0; i < 10; i++) {
         EXPECT_EQ(values[i], i);
     }
+
+    for (int i = 0; i < 10; i++) {
+        queue.PushBack(i);
+    }
+    EXPECT_EQ(queue.Size(), 10);
+    for (int i = 0; i < 10; i++) {
+        auto value = queue.Pop();
+        ASSERT_TRUE(value.has_value());
+        EXPECT_EQ(value.value(), i);
+    }
+    auto value = queue.Pop();
+    EXPECT_FALSE(value.has_value());
+    EXPECT_EQ(value.error(), QueueError::QUEUE_IS_EMPTY);
 }
 
-TEST_F(MpscQueueTest, Overflow) {
+TEST_F(MpscQueueTest, OverFlowWithFlush) {
     // overflow 1
     MpscQueue<int, 10> queue;
     for (int i = 0; i < 11; i++) {
@@ -68,6 +81,31 @@ TEST_F(MpscQueueTest, Overflow) {
     EXPECT_EQ(values.size(), 10);
     for (int i = 0; i < 10; i++) {
         EXPECT_EQ(values[i], i + 12);
+    }
+}
+
+TEST_F(MpscQueueTest, OverFlowWithPop) {
+    // overflow 1
+    MpscQueue<int, 10> queue;
+    for (int i = 0; i < 11; i++) {
+        queue.PushBack(i);
+    }
+    EXPECT_EQ(queue.Size(), 10);
+    for (int i = 0; i < 10; i++) {
+        auto value = queue.Pop();
+        ASSERT_TRUE(value.has_value());
+        EXPECT_EQ(value.value(), i + 1);
+    }
+
+    // overflow 2
+    for (int i = 0; i < 22; i++) {
+        queue.PushBack(i);
+    }
+    EXPECT_EQ(queue.Size(), 10);
+    for (int i = 0; i < 10; i++) {
+        auto value = queue.Pop();
+        ASSERT_TRUE(value.has_value());
+        EXPECT_EQ(value.value(), i + 12);
     }
 }
 }// namespace sigmax

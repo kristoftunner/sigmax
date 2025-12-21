@@ -43,7 +43,7 @@ public:
     /// \brief Pops out all the elements from the queue using a single read
     std::expected<T, QueueError> Pop()
     {
-        if (m_head != m_tail) {
+        if (m_size > 0) {
             const T elem = m_data[m_tail];
             m_tail = (m_tail + 1) % m_data.size();
             m_size--;
