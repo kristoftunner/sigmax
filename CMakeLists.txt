@@ -89,9 +89,7 @@ include(cmake/PackageProject.cmake)
 # Add other targets that you want installed here, by default we just package the one executable
 # we know we want to ship
 sigmax_package_project(
-    TARGETS
-    sigmax_options
-    sigmax_warnings
+    TARGETS sigmax_options sigmax_warnings
     # FIXME: this does not work! CK
     # PRIVATE_DEPENDENCIES_CONFIGURED project_options project_warnings
 )
