@@ -23,14 +23,17 @@ function(sigmax_setup_dependencies)
             OPTIONS
             "SPDLOG_FMT_EXTERNAL ON")
     endif()
-    cpmaddpackage(
-      NAME googletest
-      GITHUB_REPOSITORY google/googletest
-      VERSION 1.14.0
-      OPTIONS
-      "INSTALL_GTEST OFF"
-      "gtest_force_shared_crt ON"
-    )
+    if(NOT TARGET GTest::gtest_main)
+        cpmaddpackage(
+            NAME
+            googletest
+            GITHUB_REPOSITORY
+            google/googletest
+            VERSION
+            1.14.0
+            OPTIONS
+            "gtest_force_shared_crt ON")
+    endif()
 
     if(NOT TARGET Catch2::Catch2WithMain)
         cpmaddpackage("gh:catchorg/Catch2@3.8.1")

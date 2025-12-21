@@ -19,5 +19,6 @@ public:
 
 private:
     static std::shared_ptr<spdlog::logger> s_logger;
+    static inline bool s_initialized{ false };
 };
 }// namespace sigmax
