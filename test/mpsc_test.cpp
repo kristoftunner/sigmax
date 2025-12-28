@@ -1,23 +1,25 @@
-#include <exception>
+#include <chrono>
+#include <future>
+#include <thread>
+
 #include <gtest/gtest.h>
 
 #include "mpsc_queue.hpp"
 
 namespace sigmax {
-class MpscQueueTest : public ::testing::Test {
+class MpscQueueTest : public ::testing::Test
+{
 protected:
-    void SetUp() override {
-        Logger::Init();
-    }
+    void SetUp() override { Logger::Init(); }
 };
 /// \brief Test the MpscQueue class
 /// \test Basic push and pop ops
-TEST_F(MpscQueueTest, PushAndPop) {
-    MpscQueue<int, 10> queue;
-    queue.PushBack(1);
-    queue.PushBack(2);
-    queue.PushBack(3);
-    EXPECT_EQ(queue.Size(), 3);
+TEST_F(MpscQueueTest, PushAndPop)
+{
+    MpscQueue<int, 16> queue;
+    EXPECT_EQ(queue.PushBack(1), QueueState::SUCCESS);
+    EXPECT_EQ(queue.PushBack(2), QueueState::SUCCESS);
+    EXPECT_EQ(queue.PushBack(3), QueueState::SUCCESS);
     auto value = queue.Pop();
     EXPECT_TRUE(value.has_value());
     EXPECT_EQ(value.value(), 1);
@@ -29,83 +31,104 @@ TEST_F(MpscQueueTest, PushAndPop) {
     EXPECT_EQ(value.value(), 3);
     value = queue.Pop();
     EXPECT_FALSE(value.has_value());
-    EXPECT_EQ(value.error(), QueueError::QUEUE_IS_EMPTY);
+    EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
 }
 
 
-TEST_F(MpscQueueTest, FillAndFlush) {
-    MpscQueue<int, 10> queue;
-    for (int i = 0; i < 10; i++) {
-        queue.PushBack(i);
-    }
-    EXPECT_EQ(queue.Size(), 10);
-    auto values = queue.Flush();
-    EXPECT_EQ(values.size(), 10);
-    for (int i = 0; i < 10; i++) {
-        EXPECT_EQ(values[i], i);
-    }
+TEST_F(MpscQueueTest, FillAndPopEmpty)
+{
+    MpscQueue<int, 8> queue;
+    for (int i = 0; i < 8; i++) { EXPECT_EQ(queue.PushBack(i), QueueState::SUCCESS); }
 
-    for (int i = 0; i < 10; i++) {
-        queue.PushBack(i);
-    }
-    EXPECT_EQ(queue.Size(), 10);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 8; i++) {
         auto value = queue.Pop();
         ASSERT_TRUE(value.has_value());
         EXPECT_EQ(value.value(), i);
     }
     auto value = queue.Pop();
     EXPECT_FALSE(value.has_value());
-    EXPECT_EQ(value.error(), QueueError::QUEUE_IS_EMPTY);
+    EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
 }
 
-TEST_F(MpscQueueTest, OverFlowWithFlush) {
+TEST_F(MpscQueueTest, OverflowTwice)
+{
     // overflow 1
-    MpscQueue<int, 10> queue;
-    for (int i = 0; i < 11; i++) {
-        queue.PushBack(i);
-    }
-    EXPECT_EQ(queue.Size(), 10);
-    auto values = queue.Flush();
-    EXPECT_EQ(values.size(), 10);
-    for (int i = 0; i < 10; i++) {
-        EXPECT_EQ(values[i], i + 1);
-    }
+    MpscQueue<int, 16> queue;
+    for (int i{ 0 }; i < 2; i++) {
+        for (int j{ 0 }; j < 16; j++) { queue.PushBack(j); }
+        for (int k{ 0 }; k < 2; k++) {
+            auto ret = queue.PushBack(10 + k);
+            EXPECT_EQ(ret, QueueState::QUEUE_IS_FULL);
+        }
 
-    // overflow twice
-    for (int i = 0; i < 22; i++) {
-        queue.PushBack(i);
-    }
-    EXPECT_EQ(queue.Size(), 10);
-    values = queue.Flush();
-    EXPECT_EQ(values.size(), 10);
-    for (int i = 0; i < 10; i++) {
-        EXPECT_EQ(values[i], i + 12);
+        for (int j = 0; j < 16; j++) {
+            auto value = queue.Pop();
+            ASSERT_TRUE(value.has_value());
+            EXPECT_EQ(value.value(), j);
+        }
+
+        auto value = queue.Pop();
+        EXPECT_FALSE(value.has_value());
+        EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
+
+        value = queue.Pop();
+        EXPECT_FALSE(value.has_value());
+        EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
     }
 }
 
-TEST_F(MpscQueueTest, OverFlowWithPop) {
-    // overflow 1
-    MpscQueue<int, 10> queue;
-    for (int i = 0; i < 11; i++) {
-        queue.PushBack(i);
-    }
-    EXPECT_EQ(queue.Size(), 10);
-    for (int i = 0; i < 10; i++) {
-        auto value = queue.Pop();
-        ASSERT_TRUE(value.has_value());
-        EXPECT_EQ(value.value(), i + 1);
-    }
 
-    // overflow 2
-    for (int i = 0; i < 22; i++) {
-        queue.PushBack(i);
-    }
-    EXPECT_EQ(queue.Size(), 10);
-    for (int i = 0; i < 10; i++) {
-        auto value = queue.Pop();
-        ASSERT_TRUE(value.has_value());
-        EXPECT_EQ(value.value(), i + 12);
-    }
+/// \brief multiple consumer and single producer concurrency tests
+/// \detail 2 producer and one consumer
+TEST_F(MpscQueueTest, MultipleConsumerTest)
+{
+
+    // this not a performance test if the reader can consume data fast enough from the queue
+    // rather to test the concurrency of the queue
+    MpscQueue<int, 512> queue;
+    auto writer1 = [&]() {
+        int i{ 0 };
+        while (i < 200) {
+
+            auto ret = queue.PushBack(1);
+            EXPECT_EQ(ret, QueueState::SUCCESS);
+            i++;
+            if (i % 30) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+        }
+    };
+    auto writer2 = [&]() {
+        int i{ 0 };
+        while (i < 300) {
+
+            auto ret =queue.PushBack(2);
+            EXPECT_EQ(ret, QueueState::SUCCESS);
+            i++;
+            if (i % 20) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+        }
+    };
+    auto reader = [&]() -> int {
+        int count{ 0 };
+        while (count < 500) {
+            auto ret = queue.Pop();
+            if(ret.has_value()) {
+                count += ret.value();
+            }
+        }
+
+        return count;
+    };
+
+    auto fut = std::async(std::launch::async, reader);
+    std::thread w1Thread(writer1);
+    std::thread w2Thread(writer2);
+    std::thread readerThread(reader);
+
+    w1Thread.join();
+    w2Thread.join();
+    const int res = fut.get();
+
+    EXPECT_EQ(res, 500);
 }
+
+
 }// namespace sigmax
