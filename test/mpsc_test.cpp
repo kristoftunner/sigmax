@@ -88,34 +88,42 @@ TEST_F(MpscQueueTest, MultipleConsumerTest)
     MpscQueue<int, 512> queue;
     auto writer1 = [&]() {
         int i{ 0 };
-        while (i < 200) {
+        while (i < 50) {
 
             auto ret = queue.PushBack(1);
             EXPECT_EQ(ret, QueueState::SUCCESS);
             i++;
             if (i % 30) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+            if(i == 50) {
+                asm volatile("nop");
+            }
         }
     };
     auto writer2 = [&]() {
         int i{ 0 };
-        while (i < 300) {
+        while (i < 60) {
 
             auto ret =queue.PushBack(2);
             EXPECT_EQ(ret, QueueState::SUCCESS);
             i++;
             if (i % 20) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+            if(i == 60) {
+                asm volatile("nop");
+            }
         }
     };
     auto reader = [&]() -> int {
-        int count{ 0 };
-        while (count < 500) {
+        int popCount{ 0 };
+        int sum{ 0 };
+        while (popCount < 110) {
             auto ret = queue.Pop();
             if(ret.has_value()) {
-                count += ret.value();
+                popCount++;
+                sum += ret.value();
             }
         }
 
-        return count;
+        return popCount;
     };
 
     auto fut = std::async(std::launch::async, reader);

@@ -1,16 +1,16 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <expected>
-#include <vector>
 
 #include "log.hpp"
 
 namespace sigmax {
 
 enum class QueueState : std::uint8_t { SUCCESS, QUEUE_IS_EMPTY, QUEUE_IS_FULL };
-// TODO: 
+// TODO:
 // - pimp up the queue with a custom allocator type
 // - not use std::array.at(), use instead plain array indexing
 
@@ -20,35 +20,23 @@ enum class QueueState : std::uint8_t { SUCCESS, QUEUE_IS_EMPTY, QUEUE_IS_FULL };
 template<typename T, std::size_t C> class MpscQueue
 {
 public:
-    MpscQueue()
-    : m_buffer_mask(C)
+    MpscQueue() : m_buffer_mask(C)
     {
-        for(std::size_t i{0}; i < C; i++)
-        {
-            m_data[i].sequence.store(i, std::memory_order_relaxed);
-        }
+        for (std::size_t i{ 0 }; i < C; i++) { m_data[i].sequence.store(i, std::memory_order_relaxed); }
     }
 
     /// \brief pushing back a single element
     QueueState PushBack(const T &element)
     {
-        auto pos = m_head.load(std::memory_order_relaxed);        
-        while(true)
-        {
+        auto pos = m_head.load(std::memory_order_relaxed);
+        while (true) {
             const auto seq = m_data.at(pos % m_buffer_mask).sequence.load(std::memory_order_acquire);
             const std::int64_t diff = static_cast<std::int64_t>(seq) - static_cast<std::int64_t>(pos);
-            if(diff == 0L)
-            {
-                if(m_head.compare_exchange_strong(pos, pos + 1))
-                {
-                    break;
-                }
-            }   
-            else if(diff < 0L)
-            {
+            if (diff == 0L) {
+                if (m_head.compare_exchange_strong(pos, pos + 1)) { break; }
+            } else if (diff < 0L) {
                 return QueueState::QUEUE_IS_FULL;
-            }
-            else {
+            } else {
                 pos = m_head.load(std::memory_order_relaxed);
             }
         }
@@ -63,37 +51,29 @@ public:
     std::expected<T, QueueState> Pop()
     {
         auto pos = m_tail.load(std::memory_order_relaxed);
-        while(true)
-        {
+        while (true) {
             const auto seq = m_data.at(pos % m_buffer_mask).sequence.load(std::memory_order_acquire);
             const std::int64_t diff = static_cast<std::int64_t>(seq) - static_cast<std::int64_t>(pos + 1);
-            if(diff == 0L)
-            {
-                if(m_tail.compare_exchange_strong(pos, pos + 1))
-                {
-                    break;
-                }
-            }
-            else if(diff < 0L)
-            {
+            if (diff == 0L) {
+                if (m_tail.compare_exchange_strong(pos, pos + 1)) { break; }
+            } else if (diff < 0L) {
                 return std::unexpected(QueueState::QUEUE_IS_EMPTY);
-            }
-            else {
+            } else {
                 pos = m_tail.load(std::memory_order_relaxed);
             }
-
         }
         const auto data = m_data.at(pos % m_buffer_mask).data;
         m_data.at(pos % m_buffer_mask).sequence.store(pos + m_buffer_mask, std::memory_order_release);
         return data;
     }
-private:
+
     struct Cell
     {
         T data;
         std::atomic<std::size_t> sequence;
     };
 
+private:
     const std::size_t m_buffer_mask;
     std::array<Cell, C> m_data{};
     std::atomic<std::size_t> m_head{ 0 }, m_tail{ 0 };
