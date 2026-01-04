@@ -16,7 +16,8 @@ protected:
 /// \test Basic push and pop ops
 TEST_F(MpscQueueTest, PushAndPop)
 {
-    MpscQueue<int, 16> queue;
+    static constexpr int kQueueSize = 16;
+    MpscQueue<int, kQueueSize> queue;
     EXPECT_EQ(queue.PushBack(1), QueueState::SUCCESS);
     EXPECT_EQ(queue.PushBack(2), QueueState::SUCCESS);
     EXPECT_EQ(queue.PushBack(3), QueueState::SUCCESS);
@@ -37,10 +38,11 @@ TEST_F(MpscQueueTest, PushAndPop)
 
 TEST_F(MpscQueueTest, FillAndPopEmpty)
 {
-    MpscQueue<int, 8> queue;
-    for (int i = 0; i < 8; i++) { EXPECT_EQ(queue.PushBack(i), QueueState::SUCCESS); }
+    static constexpr int kQueueSize = 8;
+    MpscQueue<int, kQueueSize> queue;
+    for (int i = 0; i < kQueueSize; i++) { EXPECT_EQ(queue.PushBack(i), QueueState::SUCCESS); }
 
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < kQueueSize; i++) {
         auto value = queue.Pop();
         ASSERT_TRUE(value.has_value());
         EXPECT_EQ(value.value(), i);
@@ -53,15 +55,16 @@ TEST_F(MpscQueueTest, FillAndPopEmpty)
 TEST_F(MpscQueueTest, OverflowTwice)
 {
     // overflow 1
-    MpscQueue<int, 16> queue;
+    static constexpr int kQueueSize = 16;
+    MpscQueue<int, kQueueSize> queue;
     for (int i{ 0 }; i < 2; i++) {
-        for (int j{ 0 }; j < 16; j++) { queue.PushBack(j); }
+        for (int j{ 0 }; j < kQueueSize; j++) { queue.PushBack(j); }
         for (int k{ 0 }; k < 2; k++) {
             auto ret = queue.PushBack(10 + k);
             EXPECT_EQ(ret, QueueState::QUEUE_IS_FULL);
         }
 
-        for (int j = 0; j < 16; j++) {
+        for (int j{ 0 }; j < kQueueSize; j++) {
             auto value = queue.Pop();
             ASSERT_TRUE(value.has_value());
             EXPECT_EQ(value.value(), j);
@@ -85,57 +88,52 @@ TEST_F(MpscQueueTest, MultipleConsumerTest)
 
     // this not a performance test if the reader can consume data fast enough from the queue
     // rather to test the concurrency of the queue
-    MpscQueue<int, 512> queue;
+    static constexpr int kQueueSize = 512;
+    MpscQueue<int, kQueueSize> queue;
     auto writer1 = [&]() {
         int i{ 0 };
-        while (i < 50) {
+        while (i < kQueueSize / 2) {
 
             auto ret = queue.PushBack(1);
             EXPECT_EQ(ret, QueueState::SUCCESS);
             i++;
-            if (i % 30) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
-            if(i == 50) {
-                asm volatile("nop");
-            }
+            if (i % (kQueueSize / 8)) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
         }
     };
     auto writer2 = [&]() {
         int i{ 0 };
-        while (i < 60) {
+        while (i < kQueueSize / 2) {
 
             auto ret =queue.PushBack(2);
             EXPECT_EQ(ret, QueueState::SUCCESS);
             i++;
-            if (i % 20) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
-            if(i == 60) {
-                asm volatile("nop");
-            }
+            if (i % (kQueueSize / 8)) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
         }
     };
-    auto reader = [&]() -> int {
-        int popCount{ 0 };
+    auto reader = [&]() -> std::pair<int, int> {
+        int successfulPopCount{ 0 };
         int sum{ 0 };
-        while (popCount < 110) {
+        while (successfulPopCount < kQueueSize) {
             auto ret = queue.Pop();
             if(ret.has_value()) {
-                popCount++;
+                successfulPopCount++;
                 sum += ret.value();
             }
         }
 
-        return popCount;
+        return { successfulPopCount, sum };
     };
 
     auto fut = std::async(std::launch::async, reader);
     std::thread w1Thread(writer1);
     std::thread w2Thread(writer2);
-    std::thread readerThread(reader);
 
     w1Thread.join();
     w2Thread.join();
-    const int res = fut.get();
+    const auto [popCount, sum] = fut.get();
 
-    EXPECT_EQ(res, 500);
+    EXPECT_EQ(popCount, kQueueSize);
+    EXPECT_EQ(sum, kQueueSize / 2 * (1 + 2));
 }
 
 
