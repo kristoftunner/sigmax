@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 
 namespace sigmax {
+// TODO: create a logger for each module at some point
 class Logger
 {
 public:
@@ -19,5 +20,6 @@ public:
 
 private:
     static std::shared_ptr<spdlog::logger> s_logger;
+    static inline bool s_initialized{ false };
 };
 }// namespace sigmax
