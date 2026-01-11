@@ -5,12 +5,12 @@ find_package(fmt)
 
 add_executable(fuzz_tester fuzz_tester.cpp)
 target_link_libraries(
-  fuzz_tester
-  PRIVATE sigmax_options
-          sigmax_warnings
-          fmt::fmt
-          -coverage
-          -fsanitize=fuzzer)
+    fuzz_tester
+    PRIVATE sigmax_options
+            sigmax_warnings
+            fmt::fmt
+            -coverage
+            -fsanitize=fuzzer)
 target_compile_options(fuzz_tester PRIVATE -fsanitize=fuzzer)
 
 # Allow short runs during automated testing to see if something new breaks
