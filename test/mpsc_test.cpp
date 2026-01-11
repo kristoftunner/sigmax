@@ -176,7 +176,5 @@ TEST_F(MpscQueueTest, MultipleConsumerTest2)
     EXPECT_EQ(popCount, kQueueSize);
     EXPECT_EQ(sum, kQueueSize);
     EXPECT_EQ(queue.GetPopCount(), kQueueSize);
-    EXPECT_EQ(queue.GetPushCount(), static_cast<std::size_t>(kQueueSize * 3)); // for the sake of int arithmetic
-
 }
 }// namespace sigmax

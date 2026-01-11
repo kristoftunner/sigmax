@@ -47,7 +47,7 @@ public:
 
         m_data[pos % m_buffer_mask].data = element;
         m_data[pos % m_buffer_mask].sequence.store(pos + 1);
-        m_pushCount.fetch_add(1);
+        m_pushCount.fetch_add(1, std::memory_order_release);
         return QueueState::SUCCESS;
     }
     /// \brief pushing back multiple elements to the queue
@@ -69,7 +69,7 @@ public:
         }
         const auto data = m_data[pos % m_buffer_mask].data;
         m_data[pos % m_buffer_mask].sequence.store(pos + m_buffer_mask);
-        m_popCount.fetch_add(1);
+        m_popCount.fetch_add(1, std::memory_order_release);
         return data;
     }
 
