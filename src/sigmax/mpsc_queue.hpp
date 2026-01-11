@@ -47,6 +47,7 @@ public:
 
         m_data[pos % m_buffer_mask].data = element;
         m_data[pos % m_buffer_mask].sequence.store(pos + 1);
+        m_pushCount.fetch_add(1);
         return QueueState::SUCCESS;
     }
     /// \brief pushing back multiple elements to the queue
@@ -61,7 +62,6 @@ public:
             if (diff == 0L) {
                 if (m_tail.compare_exchange_strong(pos, pos + 1)) { break; }
             } else if (diff < 0L) {
-                m_popCount.fetch_add(1);
                 return std::unexpected(QueueState::QUEUE_IS_EMPTY);
             } else {
                 pos = m_tail.load();
@@ -70,9 +70,14 @@ public:
         const auto data = m_data[pos % m_buffer_mask].data;
         m_data[pos % m_buffer_mask].sequence.store(pos + m_buffer_mask);
         m_popCount.fetch_add(1);
-        m_successfulPopCount.fetch_add(1);
         return data;
     }
+
+    /// \brief Get the number of elements pushed to the queue, this is best-effort, not guaranteed to be accurate
+    std::size_t GetPushCount() const { return m_pushCount.load(); }
+
+    /// \brief Get the number of elements popped from the queue, this is best-effort, not guaranteed to be accurate
+    std::size_t GetPopCount() const { return m_popCount.load(); }
 
     struct Cell
     {
@@ -83,6 +88,7 @@ public:
 private:
     const std::size_t m_buffer_mask;
     std::array<Cell, C> m_data{};
-    std::atomic<std::size_t> m_head{ 0 }, m_tail{ 0 }, m_popCount{ 0 }, m_successfulPopCount{ 0 };
+    std::atomic<std::size_t> m_head{ 0 }, m_tail{ 0 };
+    std::atomic<std::size_t> m_pushCount{ 0 }, m_popCount{ 0 };
 };
 }// namespace sigmax

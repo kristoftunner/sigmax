@@ -83,7 +83,7 @@ TEST_F(MpscQueueTest, OverflowTwice)
 
 /// \brief multiple consumer and single producer concurrency tests
 /// \detail 2 producer and one consumer
-TEST_F(MpscQueueTest, MultipleConsumerTest)
+TEST_F(MpscQueueTest, MultipleConsumerTest1)
 {
 
     // this not a performance test if the reader can consume data fast enough from the queue
@@ -137,4 +137,46 @@ TEST_F(MpscQueueTest, MultipleConsumerTest)
 }
 
 
+/// \brief multiple producer and single consumer concurrency tests
+/// \detail 3 producer and one consumer, overwriting the queue
+TEST_F(MpscQueueTest, MultipleConsumerTest2)
+{
+
+    static constexpr int kQueueSize = 512;
+    MpscQueue<int, kQueueSize> queue;
+    auto writer = [&](const int valuesToWrite) {
+        for(int i{0}; i < valuesToWrite; i++) {
+            queue.PushBack(1);
+        }
+    };
+    auto reader = [&](const int valuesToRead) -> std::pair<int, int> {
+        int successfulPopCount{ 0 };
+        int sum{ 0 };
+        while (successfulPopCount < valuesToRead) {
+            auto ret = queue.Pop();
+            if(ret.has_value()) {
+                successfulPopCount++;
+                sum += ret.value();
+            }
+        }
+
+        return { successfulPopCount, sum };
+    };
+
+    auto fut = std::async(std::launch::async, reader, kQueueSize);
+    std::thread w1Thread(writer, kQueueSize);
+    std::thread w2Thread(writer, kQueueSize);
+    std::thread w3Thread(writer, kQueueSize);
+
+    w1Thread.join();
+    w2Thread.join();
+    w3Thread.join();
+    const auto [popCount, sum] = fut.get();
+
+    EXPECT_EQ(popCount, kQueueSize);
+    EXPECT_EQ(sum, kQueueSize);
+    EXPECT_EQ(queue.GetPopCount(), kQueueSize);
+    EXPECT_EQ(queue.GetPushCount(), static_cast<std::size_t>(kQueueSize * 3)); // for the sake of int arithmetic
+
+}
 }// namespace sigmax
