@@ -126,7 +126,8 @@ jobs:
         # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
         run: |
           ctest -C ${{matrix.build_type}}
-          gcovr -j ${{env.nproc}} --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable '${{ matrix.gcov_executable }}'
+        # not using codecov currently
+        # gcovr -j ${{env.nproc}} --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable '${{ matrix.gcov_executable }}'
 
       - name: CPack
         if: matrix.package_generator != ''
@@ -145,7 +146,7 @@ jobs:
       - name: Publish to codecov
         uses: codecov/codecov-action@v5
         with:
-          fail_ci_if_error: true # we weren't posting previously
+          fail_ci_if_error: false # we weren't posting previously
           flags: ${{ runner.os }}
           name: ${{ runner.os }}-coverage
           token: ${{ secrets.CODECOV_TOKEN }}

@@ -1,0 +1,180 @@
+#include <chrono>
+#include <future>
+#include <thread>
+
+#include <gtest/gtest.h>
+
+#include "mpsc_queue.hpp"
+
+namespace sigmax {
+class MpscQueueTest : public ::testing::Test
+{
+protected:
+    void SetUp() override { Logger::Init(); }
+};
+/// \brief Test the MpscQueue class
+/// \test Basic push and pop ops
+TEST_F(MpscQueueTest, PushAndPop)
+{
+    static constexpr int kQueueSize = 16;
+    MpscQueue<int, kQueueSize> queue;
+    EXPECT_EQ(queue.PushBack(1), QueueState::SUCCESS);
+    EXPECT_EQ(queue.PushBack(2), QueueState::SUCCESS);
+    EXPECT_EQ(queue.PushBack(3), QueueState::SUCCESS);
+    auto value = queue.Pop();
+    EXPECT_TRUE(value.has_value());
+    EXPECT_EQ(value.value(), 1);
+    value = queue.Pop();
+    EXPECT_TRUE(value.has_value());
+    EXPECT_EQ(value.value(), 2);
+    value = queue.Pop();
+    EXPECT_TRUE(value.has_value());
+    EXPECT_EQ(value.value(), 3);
+    value = queue.Pop();
+    EXPECT_FALSE(value.has_value());
+    EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
+}
+
+
+TEST_F(MpscQueueTest, FillAndPopEmpty)
+{
+    static constexpr int kQueueSize = 8;
+    MpscQueue<int, kQueueSize> queue;
+    for (int i = 0; i < kQueueSize; i++) { EXPECT_EQ(queue.PushBack(i), QueueState::SUCCESS); }
+
+    for (int i = 0; i < kQueueSize; i++) {
+        auto value = queue.Pop();
+        ASSERT_TRUE(value.has_value());
+        EXPECT_EQ(value.value(), i);
+    }
+    auto value = queue.Pop();
+    EXPECT_FALSE(value.has_value());
+    EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
+}
+
+TEST_F(MpscQueueTest, OverflowTwice)
+{
+    // overflow 1
+    static constexpr int kQueueSize = 16;
+    MpscQueue<int, kQueueSize> queue;
+    for (int i{ 0 }; i < 2; i++) {
+        for (int j{ 0 }; j < kQueueSize; j++) { queue.PushBack(j); }
+        for (int k{ 0 }; k < 2; k++) {
+            auto ret = queue.PushBack(10 + k);
+            EXPECT_EQ(ret, QueueState::QUEUE_IS_FULL);
+        }
+
+        for (int j{ 0 }; j < kQueueSize; j++) {
+            auto value = queue.Pop();
+            ASSERT_TRUE(value.has_value());
+            EXPECT_EQ(value.value(), j);
+        }
+
+        auto value = queue.Pop();
+        EXPECT_FALSE(value.has_value());
+        EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
+
+        value = queue.Pop();
+        EXPECT_FALSE(value.has_value());
+        EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
+    }
+}
+
+
+/// \brief multiple consumer and single producer concurrency tests
+/// \detail 2 producer and one consumer
+TEST_F(MpscQueueTest, MultipleConsumerTest1)
+{
+
+    // this not a performance test if the reader can consume data fast enough from the queue
+    // rather to test the concurrency of the queue
+    static constexpr int kQueueSize = 512;
+    MpscQueue<int, kQueueSize> queue;
+    auto writer1 = [&]() {
+        int i{ 0 };
+        while (i < kQueueSize / 2) {
+
+            auto ret = queue.PushBack(1);
+            EXPECT_EQ(ret, QueueState::SUCCESS);
+            i++;
+            if (i % (kQueueSize / 8)) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+        }
+    };
+    auto writer2 = [&]() {
+        int i{ 0 };
+        while (i < kQueueSize / 2) {
+
+            auto ret =queue.PushBack(2);
+            EXPECT_EQ(ret, QueueState::SUCCESS);
+            i++;
+            if (i % (kQueueSize / 8)) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+        }
+    };
+    auto reader = [&]() -> std::pair<int, int> {
+        int successfulPopCount{ 0 };
+        int sum{ 0 };
+        while (successfulPopCount < kQueueSize) {
+            auto ret = queue.Pop();
+            if(ret.has_value()) {
+                successfulPopCount++;
+                sum += ret.value();
+            }
+        }
+
+        return { successfulPopCount, sum };
+    };
+
+    auto fut = std::async(std::launch::async, reader);
+    std::thread w1Thread(writer1);
+    std::thread w2Thread(writer2);
+
+    w1Thread.join();
+    w2Thread.join();
+    const auto [popCount, sum] = fut.get();
+
+    EXPECT_EQ(popCount, kQueueSize);
+    EXPECT_EQ(sum, kQueueSize / 2 * (1 + 2));
+}
+
+
+/// \brief multiple producer and single consumer concurrency tests
+/// \detail 3 producer and one consumer, overwriting the queue
+TEST_F(MpscQueueTest, MultipleConsumerTest2)
+{
+
+    static constexpr int kQueueSize = 512;
+    MpscQueue<int, kQueueSize> queue;
+    auto writer = [&](const int valuesToWrite) {
+        for(int i{0}; i < valuesToWrite; i++) {
+            queue.PushBack(1);
+        }
+    };
+    auto reader = [&](const int valuesToRead) -> std::pair<int, int> {
+        int successfulPopCount{ 0 };
+        int sum{ 0 };
+        while (successfulPopCount < valuesToRead) {
+            auto ret = queue.Pop();
+            if(ret.has_value()) {
+                successfulPopCount++;
+                sum += ret.value();
+            }
+        }
+
+        return { successfulPopCount, sum };
+    };
+
+    auto fut = std::async(std::launch::async, reader, kQueueSize);
+    std::thread w1Thread(writer, kQueueSize);
+    std::thread w2Thread(writer, kQueueSize);
+    std::thread w3Thread(writer, kQueueSize);
+
+    w1Thread.join();
+    w2Thread.join();
+    w3Thread.join();
+    const auto [popCount, sum] = fut.get();
+
+    EXPECT_EQ(popCount, kQueueSize);
+    EXPECT_EQ(sum, kQueueSize);
+    EXPECT_EQ(queue.GetPopCount(), kQueueSize);
+}
+}// namespace sigmax

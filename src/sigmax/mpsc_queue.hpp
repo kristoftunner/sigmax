@@ -1,75 +1,94 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <expected>
-#include <vector>
+#include <iostream>
 
 #include "log.hpp"
 
 namespace sigmax {
 
-// TODO: pimp up the queue with a custom allocator type
-template<typename T, int C> class MpscQueue
+enum class QueueState : std::uint8_t { SUCCESS, QUEUE_IS_EMPTY, QUEUE_IS_FULL };
+// TODO:
+// - pimp up the queue with a custom allocator type
+// - not use std::array.at(), use instead plain array indexing
+
+/// \brief A multi-producer single-consumer queue
+/// \details The queue is implemented as a ringbuffer
+/// and atomic head/tail pointers, it is thread safe, unfortunately there is no size function
+template<typename T, std::size_t C> class MpscQueue
 {
 public:
-    enum class QueueError : std::uint8_t { QUEUE_IS_EMPTY, QUEUE_IS_FULL };
-    explicit MpscQueue(const int size) : m_data(size) {}
-    int Size()
+    MpscQueue() : m_buffer_mask(C)
     {
-        if (m_head < m_tail) {
-            return C - m_tail + m_head;
-        } else {
-            return m_head - m_tail;
-        }
+        for (std::size_t i{ 0 }; i < C; i++) { m_data[i].sequence.store(i); }
+        std::cout << "head is lock free: " << m_head.is_lock_free() << std::endl;
     }
+
     /// \brief pushing back a single element
-    void PushBack(const T &element)
+    QueueState PushBack(const T &element)
     {
-        const int newHead = (m_head + 1) % static_cast<int>(m_data.size());
-        if (m_tail == newHead) {
-            // new tail is one after the head -> we lost the oldest data in the queue
-            m_tail = (m_tail + 1) % static_cast<int>(m_data.size());
-            Logger::Warn("Head reached tail, dropping a queue element");
+        auto pos = m_head.load();
+        while (true) {
+            const auto seq = m_data[pos % m_buffer_mask].sequence.load();
+            const std::int64_t diff = static_cast<std::int64_t>(seq) - static_cast<std::int64_t>(pos);
+            if (diff == 0L) {
+                if (m_head.compare_exchange_strong(pos, pos + 1)) { break; }
+            } else if (diff < 0L) {
+                std::cout << "queue is full" << std::endl;
+                return QueueState::QUEUE_IS_FULL;
+            } else {
+                pos = m_head.load();
+                std::cout << "pos changed: " << pos << std::endl;
+            }
         }
-        m_head = newHead;
-        m_data[newHead] = element;
+
+        m_data[pos % m_buffer_mask].data = element;
+        m_data[pos % m_buffer_mask].sequence.store(pos + 1);
+        m_pushCount.fetch_add(1, std::memory_order_release);
+        return QueueState::SUCCESS;
     }
     /// \brief pushing back multiple elements to the queue
     void PushBack(const std::vector<T> elements) {}
     /// \brief Pops out all the elements from the queue using a single read
-    std::expected<QueueError, T> Pop()
+    std::expected<T, QueueState> Pop()
     {
-        if (m_head != m_tail) {
-            const T elem = m_data[m_tail];
-            m_tail = (m_tail + 1) % static_cast<int>(m_data.size());
-            return std::move(elem);
-        } else {
-            return QueueError::QUEUE_IS_EMPTY;
+        auto pos = m_tail.load();
+        while (true) {
+            const auto seq = m_data[pos % m_buffer_mask].sequence.load();
+            const std::int64_t diff = static_cast<std::int64_t>(seq) - static_cast<std::int64_t>(pos + 1);
+            if (diff == 0L) {
+                if (m_tail.compare_exchange_strong(pos, pos + 1)) { break; }
+            } else if (diff < 0L) {
+                return std::unexpected(QueueState::QUEUE_IS_EMPTY);
+            } else {
+                pos = m_tail.load();
+            }
         }
-    }
-    std::vector<T> Flush()
-    {
-        // the head is bigger than tail -> contiguous vector copy
-        // head is smaller than tail -> ringbuffer turned over the contiguous vector
-        // head equals to tail -> no pop
-        if (m_head == m_tail) {
-            return {};
-        } else if (m_head > m_tail) {
-            std::vector<T> ret(m_data.begin() + m_tail, m_data.begin() + m_head);
-            m_head = static_cast<int>(m_tail);
-            return std::move(ret);
-        } else if (m_head < m_tail) {
-            // assuming that the data is from tail -> end of the vector -> beginning -> head
-            std::vector<T> ret(m_data.begin() + m_tail, m_data.end());
-            ret.append_range(m_data.begin(), m_data.begin() + m_head);
-            m_head = static_cast<int>(m_tail);
-            return std::move(ret);
-        }
+        const auto data = m_data[pos % m_buffer_mask].data;
+        m_data[pos % m_buffer_mask].sequence.store(pos + m_buffer_mask);
+        m_popCount.fetch_add(1, std::memory_order_release);
+        return data;
     }
 
+    /// \brief Get the number of elements pushed to the queue, this is best-effort, not guaranteed to be accurate
+    std::size_t GetPushCount() const { return m_pushCount.load(); }
+
+    /// \brief Get the number of elements popped from the queue, this is best-effort, not guaranteed to be accurate
+    std::size_t GetPopCount() const { return m_popCount.load(); }
+
+    struct Cell
+    {
+        T data;
+        std::atomic<std::size_t> sequence;
+    };
+
 private:
-    std::array<T, C> m_data;
-    std::atomic<int> m_head{ 0 }, m_tail{ 0 };
+    const std::size_t m_buffer_mask;
+    std::array<Cell, C> m_data{};
+    std::atomic<std::size_t> m_head{ 0 }, m_tail{ 0 };
+    std::atomic<std::size_t> m_pushCount{ 0 }, m_popCount{ 0 };
 };
 }// namespace sigmax
