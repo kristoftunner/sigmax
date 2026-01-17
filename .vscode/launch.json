@@ -1,0 +1,13 @@
+{
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "unit tests",
+            "program": "${workspaceFolder}/build/tests/unit_tests",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+
+    ]
+}

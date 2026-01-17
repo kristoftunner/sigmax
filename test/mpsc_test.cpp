@@ -14,7 +14,7 @@ protected:
 };
 /// \brief Test the MpscQueue class
 /// \test Basic push and pop ops
-TEST_F(MpscQueueTest, PushAndPop)
+TEST_F(MpscQueueTest, PushAndPop_SingleThread)
 {
     static constexpr int kQueueSize = 16;
     MpscQueue<int, kQueueSize> queue;
@@ -36,7 +36,7 @@ TEST_F(MpscQueueTest, PushAndPop)
 }
 
 
-TEST_F(MpscQueueTest, FillAndPopEmpty)
+TEST_F(MpscQueueTest, FillAndPopEmpty_SingleThread)
 {
     static constexpr int kQueueSize = 8;
     MpscQueue<int, kQueueSize> queue;
@@ -52,7 +52,7 @@ TEST_F(MpscQueueTest, FillAndPopEmpty)
     EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
 }
 
-TEST_F(MpscQueueTest, OverflowTwice)
+TEST_F(MpscQueueTest, OverflowTwice_SingleThread)
 {
     // overflow 1
     static constexpr int kQueueSize = 16;
@@ -90,7 +90,12 @@ TEST_F(MpscQueueTest, MultipleConsumerTest1)
     // rather to test the concurrency of the queue
     static constexpr int kQueueSize = 512;
     MpscQueue<int, kQueueSize> queue;
-    auto writer1 = [&]() {
+    std::promise<void> go, w1Ready, w2Ready, rReady;
+    std::shared_future<void> ready(go.get_future().share());
+
+    auto writer1 = [&queue, &ready, &w1Ready]() -> void{
+        w1Ready.set_value();
+        ready.wait();
         int i{ 0 };
         while (i < kQueueSize / 2) {
 
@@ -100,7 +105,9 @@ TEST_F(MpscQueueTest, MultipleConsumerTest1)
             if (i % (kQueueSize / 8)) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
         }
     };
-    auto writer2 = [&]() {
+    auto writer2 = [&queue, &ready, &w2Ready]() -> void{
+        w2Ready.set_value();
+        ready.wait();
         int i{ 0 };
         while (i < kQueueSize / 2) {
 
@@ -110,7 +117,9 @@ TEST_F(MpscQueueTest, MultipleConsumerTest1)
             if (i % (kQueueSize / 8)) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
         }
     };
-    auto reader = [&]() -> std::pair<int, int> {
+    auto reader = [&queue, &ready, &rReady]() -> std::pair<int, int> {
+        rReady.set_value();
+        ready.wait();
         int successfulPopCount{ 0 };
         int sum{ 0 };
         while (successfulPopCount < kQueueSize) {
@@ -124,13 +133,18 @@ TEST_F(MpscQueueTest, MultipleConsumerTest1)
         return { successfulPopCount, sum };
     };
 
-    auto fut = std::async(std::launch::async, reader);
-    std::thread w1Thread(writer1);
-    std::thread w2Thread(writer2);
+    std::future<void> w1Done;
+    std::future<void> w2Done;
+    std::future<std::pair<int, int>> rDone;
 
-    w1Thread.join();
-    w2Thread.join();
-    const auto [popCount, sum] = fut.get();
+    w1Done = std::async(std::launch::async, writer1);
+    w2Done = std::async(std::launch::async, writer2);
+    rDone = std::async(std::launch::async, reader);
+
+    w1Ready.get_future().wait();
+    w2Ready.get_future().wait();
+    go.set_value();
+    const auto [popCount, sum] = rDone.get();
 
     EXPECT_EQ(popCount, kQueueSize);
     EXPECT_EQ(sum, kQueueSize / 2 * (1 + 2));
