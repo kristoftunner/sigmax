@@ -164,6 +164,8 @@ TEST_F(MpscQueueTest, MultipleConsumerTest2)
 
     static constexpr int kQueueSize = 512;
     MpscQueue<int, kQueueSize> queue;
+    std::promise<void> go, w1Ready, w2Ready, w3Ready, rReady;
+    std::shared_future<void> ready(go.get_future().share());
     auto writer = [&](const int valuesToWrite) {
         for(int i{0}; i < valuesToWrite; i++) {
             queue.PushBack(1);
