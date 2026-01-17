@@ -14,6 +14,14 @@ protected:
 };
 /// \brief Test the MpscQueue class
 /// \test Basic push and pop ops
+TEST_F(MpscQueueTest, Push_SingleThread)
+{
+    static constexpr int kQueueSize = 16;
+    MpscQueue<int, kQueueSize> queue;
+    for (int i = 0; i < kQueueSize; i++) { EXPECT_EQ(queue.PushBack(i), QueueState::SUCCESS); }
+}
+
+/// \test Basic push and pop ops
 TEST_F(MpscQueueTest, PushAndPop_SingleThread)
 {
     static constexpr int kQueueSize = 16;

@@ -32,7 +32,7 @@ public:
     {
         auto pos = m_head.load();
         while (true) {
-            const auto seq = m_data[pos % m_buffer_mask].sequence.load();
+            const auto seq = m_data.at(pos % m_buffer_mask).sequence.load();
             const std::int64_t diff = static_cast<std::int64_t>(seq) - static_cast<std::int64_t>(pos);
             if (diff == 0L) {
                 if (m_head.compare_exchange_strong(pos, pos + 1)) { break; }
@@ -44,8 +44,8 @@ public:
             }
         }
 
-        m_data[pos % m_buffer_mask].data = element;
-        m_data[pos % m_buffer_mask].sequence.store(pos + 1);
+        m_data.at(pos % m_buffer_mask).data = element;
+        m_data.at(pos % m_buffer_mask).sequence.store(pos + 1);
         m_pushCount.fetch_add(1, std::memory_order_release);
         return QueueState::SUCCESS;
     }
