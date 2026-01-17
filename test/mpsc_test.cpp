@@ -102,7 +102,6 @@ TEST_F(MpscQueueTest, MultipleConsumerTest1)
             auto ret = queue.PushBack(1);
             EXPECT_EQ(ret, QueueState::SUCCESS);
             i++;
-            if (i % (kQueueSize / 8)) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
         }
     };
     auto writer2 = [&queue, &ready, &w2Ready]() -> void{
@@ -114,7 +113,6 @@ TEST_F(MpscQueueTest, MultipleConsumerTest1)
             auto ret =queue.PushBack(2);
             EXPECT_EQ(ret, QueueState::SUCCESS);
             i++;
-            if (i % (kQueueSize / 8)) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
         }
     };
     auto reader = [&queue, &ready, &rReady]() -> std::pair<int, int> {

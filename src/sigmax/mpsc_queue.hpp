@@ -24,7 +24,7 @@ public:
     MpscQueue() : m_buffer_mask(C)
     {
         for (std::size_t i{ 0 }; i < C; i++) { m_data[i].sequence.store(i); }
-        std::cout << "head is lock free: " << m_head.is_lock_free() << std::endl;
+        LOG_INFO("head is lock free: {}", m_head.is_lock_free());
     }
 
     /// \brief pushing back a single element
@@ -37,11 +37,10 @@ public:
             if (diff == 0L) {
                 if (m_head.compare_exchange_strong(pos, pos + 1)) { break; }
             } else if (diff < 0L) {
-                std::cout << "queue is full" << std::endl;
+                LOG_DEBUG("queue is full");
                 return QueueState::QUEUE_IS_FULL;
             } else {
                 pos = m_head.load();
-                std::cout << "pos changed: " << pos << std::endl;
             }
         }
 

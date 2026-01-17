@@ -4,7 +4,7 @@
             "type": "lldb",
             "request": "launch",
             "name": "unit tests",
-            "program": "${workspaceFolder}/build/tests/unit_tests",
+            "program": "${workspaceFolder}/build/test/unit_tests",
             "args": [],
             "cwd": "${workspaceFolder}"
         }
