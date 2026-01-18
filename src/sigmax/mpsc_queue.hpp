@@ -24,7 +24,7 @@ public:
     MpscQueue() : m_buffer_mask(C)
     {
         for (std::size_t i{ 0 }; i < C; i++) { m_data[i].sequence.store(i); }
-        std::cout << "head is lock free: " << m_head.is_lock_free() << std::endl;
+        LOG_INFO("head is lock free: {}", m_head.is_lock_free());
     }
 
     /// \brief pushing back a single element
@@ -32,21 +32,20 @@ public:
     {
         auto pos = m_head.load();
         while (true) {
-            const auto seq = m_data[pos % m_buffer_mask].sequence.load();
+            const auto seq = m_data.at(pos % m_buffer_mask).sequence.load();
             const std::int64_t diff = static_cast<std::int64_t>(seq) - static_cast<std::int64_t>(pos);
             if (diff == 0L) {
                 if (m_head.compare_exchange_strong(pos, pos + 1)) { break; }
             } else if (diff < 0L) {
-                std::cout << "queue is full" << std::endl;
+                LOG_DEBUG("queue is full");
                 return QueueState::QUEUE_IS_FULL;
             } else {
                 pos = m_head.load();
-                std::cout << "pos changed: " << pos << std::endl;
             }
         }
 
-        m_data[pos % m_buffer_mask].data = element;
-        m_data[pos % m_buffer_mask].sequence.store(pos + 1);
+        m_data.at(pos % m_buffer_mask).data = element;
+        m_data.at(pos % m_buffer_mask).sequence.store(pos + 1);
         m_pushCount.fetch_add(1, std::memory_order_release);
         return QueueState::SUCCESS;
     }
@@ -68,7 +67,7 @@ public:
             }
         }
         const auto data = m_data[pos % m_buffer_mask].data;
-        m_data[pos % m_buffer_mask].sequence.store(pos + m_buffer_mask);
+        m_data[pos % m_buffer_mask].sequence.store(pos + m_buffer_mask); // TODO: this might be a bug, the sequence should be incremented by the number of elements pushed
         m_popCount.fetch_add(1, std::memory_order_release);
         return data;
     }

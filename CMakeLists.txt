@@ -69,6 +69,7 @@ enable_testing()
 if(BUILD_TESTING)
     message(AUTHOR_WARNING "Building Tests. Be sure to check out test/constexpr_tests.cpp for constexpr testing")
     add_subdirectory(test)
+    add_subdirectory(benchmarks)
 endif()
 
 if(sigmax_BUILD_FUZZ_TESTS)
@@ -90,8 +91,6 @@ include(cmake/PackageProject.cmake)
 # we know we want to ship
 sigmax_package_project(
     TARGETS sigmax_options sigmax_warnings
-    # FIXME: this does not work! CK
-    # PRIVATE_DEPENDENCIES_CONFIGURED project_options project_warnings
 )
 
 # Experience shows that explicit package naming can help make it easier to sort

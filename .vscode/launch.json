@@ -1,0 +1,21 @@
+{
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "benchmark_test",
+            "program": "${workspaceFolder}/build/benchmarks/benchmark_test",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "unit tests",
+            "program": "${workspaceFolder}/build/test/unit_tests",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+
+    ]
+}
