@@ -61,13 +61,13 @@ public:
             if (diff == 0L) {
                 if (m_tail.compare_exchange_strong(pos, pos + 1)) { break; }
             } else if (diff < 0L) {
-                return std::unexpected(QueueState::QUEUE_IS_EMPTY);
+                return QueueState::QUEUE_IS_EMPTY;
             } else {
                 pos = m_tail.load();
             }
         }
         const auto data = m_data[pos % m_buffer_mask].data;
-        m_data[pos % m_buffer_mask].sequence.store(pos + m_buffer_mask);
+        m_data[pos % m_buffer_mask].sequence.store(pos + m_buffer_mask); // TODO: this might be a bug, the sequence should be incremented by the number of elements pushed
         m_popCount.fetch_add(1, std::memory_order_release);
         return data;
     }

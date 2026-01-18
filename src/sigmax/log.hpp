@@ -17,19 +17,19 @@ class Logger
 {
 public:
     static void Init();
-    static std::shared_ptr<spdlog::logger> GetLogger(){return s_logger;};
+    static std::shared_ptr<spdlog::logger> GetLogger() { return s_logger; };
 
-    //template<typename... Args> static void Debug(Args &&...args) { s_logger->debug(std::forward<Args>(args)...); }
+    // template<typename... Args> static void Debug(Args &&...args) { s_logger->debug(std::forward<Args>(args)...); }
 
-    //template <typename FormatSrtingType, typename... Args>
-    //static void Info(FormatSrtingType&& first, Args&&... rest)
+    // template <typename FormatSrtingType, typename... Args>
+    // static void Info(FormatSrtingType&& first, Args&&... rest)
     //{
-    //    s_logger->info(std::forward<FormatSrtingType>(first), std::forward<Args>(rest)...);
-    //}
+    //     s_logger->info(std::forward<FormatSrtingType>(first), std::forward<Args>(rest)...);
+    // }
 
-    //template<typename... Args> static void Warn(Args &&...args) { s_logger->warn(std::forward<Args>(args)...); }
+    // template<typename... Args> static void Warn(Args &&...args) { s_logger->warn(std::forward<Args>(args)...); }
 
-    //template<typename... Args> static void Error(Args &&...args) { s_logger->error(std::forward<Args>(args)...); }
+    // template<typename... Args> static void Error(Args &&...args) { s_logger->error(std::forward<Args>(args)...); }
 
 private:
     static std::shared_ptr<spdlog::logger> s_logger;

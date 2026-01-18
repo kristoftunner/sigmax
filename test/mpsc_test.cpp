@@ -101,7 +101,7 @@ TEST_F(MpscQueueTest, MultipleConsumerTest1)
     std::promise<void> go, w1Ready, w2Ready, rReady;
     std::shared_future<void> ready(go.get_future().share());
 
-    auto writer1 = [&queue, &ready, &w1Ready]() -> void{
+    auto writer1 = [&queue, &ready, &w1Ready]() -> void {
         w1Ready.set_value();
         ready.wait();
         int i{ 0 };
@@ -112,13 +112,13 @@ TEST_F(MpscQueueTest, MultipleConsumerTest1)
             i++;
         }
     };
-    auto writer2 = [&queue, &ready, &w2Ready]() -> void{
+    auto writer2 = [&queue, &ready, &w2Ready]() -> void {
         w2Ready.set_value();
         ready.wait();
         int i{ 0 };
         while (i < kQueueSize / 2) {
 
-            auto ret =queue.PushBack(2);
+            auto ret = queue.PushBack(2);
             EXPECT_EQ(ret, QueueState::SUCCESS);
             i++;
         }
@@ -130,7 +130,7 @@ TEST_F(MpscQueueTest, MultipleConsumerTest1)
         int sum{ 0 };
         while (successfulPopCount < kQueueSize) {
             auto ret = queue.Pop();
-            if(ret.has_value()) {
+            if (ret.has_value()) {
                 successfulPopCount++;
                 sum += ret.value();
             }
@@ -164,19 +164,22 @@ TEST_F(MpscQueueTest, MultipleConsumerTest2)
 
     static constexpr int kQueueSize = 512;
     MpscQueue<int, kQueueSize> queue;
-    std::promise<void> go, w1Ready, w2Ready, w3Ready, rReady;
-    std::shared_future<void> ready(go.get_future().share());
-    auto writer = [&](const int valuesToWrite) {
-        for(int i{0}; i < valuesToWrite; i++) {
-            queue.PushBack(1);
-        }
+    auto writer = [](MpscQueue<int, kQueueSize> &queue, const int valuesToWrite, std::promise<void> &ready, std::shared_future<void> &go) {
+        ready.set_value();
+        go.wait();
+        for (int i{ 0 }; i < valuesToWrite; i++) { queue.PushBack(1); }
     };
-    auto reader = [&](const int valuesToRead) -> std::pair<int, int> {
+    auto reader = [](MpscQueue<int, kQueueSize> &queue,
+                      const int valuesToRead,
+                      std::promise<void> &ready,
+                      std::shared_future<void> &go) -> std::pair<int, int> {
+        ready.set_value();
+        go.wait();
         int successfulPopCount{ 0 };
         int sum{ 0 };
         while (successfulPopCount < valuesToRead) {
             auto ret = queue.Pop();
-            if(ret.has_value()) {
+            if (ret.has_value()) {
                 successfulPopCount++;
                 sum += ret.value();
             }
@@ -185,15 +188,24 @@ TEST_F(MpscQueueTest, MultipleConsumerTest2)
         return { successfulPopCount, sum };
     };
 
-    auto fut = std::async(std::launch::async, reader, kQueueSize);
-    std::thread w1Thread(writer, kQueueSize);
-    std::thread w2Thread(writer, kQueueSize);
-    std::thread w3Thread(writer, kQueueSize);
+    std::future<void> w1Done;
+    std::future<void> w2Done;
+    std::future<void> w3Done;
+    std::future<std::pair<int, int>> rDone;
 
-    w1Thread.join();
-    w2Thread.join();
-    w3Thread.join();
-    const auto [popCount, sum] = fut.get();
+    std::promise<void> go, w1Ready, w2Ready, w3Ready, rReady;
+    std::shared_future<void> ready(go.get_future().share());
+    w1Done = std::async(std::launch::async, writer, std::ref(queue), kQueueSize, std::ref(w1Ready), std::ref(ready));
+    w2Done = std::async(std::launch::async, writer, std::ref(queue), kQueueSize, std::ref(w2Ready), std::ref(ready));
+    w3Done = std::async(std::launch::async, writer, std::ref(queue), kQueueSize, std::ref(w3Ready), std::ref(ready));
+    rDone = std::async(std::launch::async, reader, std::ref(queue), kQueueSize, std::ref(rReady), std::ref(ready));
+
+    w1Ready.get_future().wait();
+    w2Ready.get_future().wait();
+    w3Ready.get_future().wait();
+    go.set_value();
+
+    const auto [popCount, sum] = rDone.get();
 
     EXPECT_EQ(popCount, kQueueSize);
     EXPECT_EQ(sum, kQueueSize);
