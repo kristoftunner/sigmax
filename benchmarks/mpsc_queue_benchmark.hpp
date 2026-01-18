@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include "log.hpp"
+#include "benchmark_utils.hpp"
 
 namespace sigmax {
 class MpscQueueBenchmark
@@ -24,6 +25,7 @@ private:
     bool SaveBenchmarkResults(const std::vector<nlohmann::json> &benchmarkResults) const;
 
     std::filesystem::path m_benchmarkResultsPath;
+    CpuInfo m_cpuInfo;
 };
 
 

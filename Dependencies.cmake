@@ -67,4 +67,20 @@ function(sigmax_setup_dependencies)
             "TRACY_ON_DEMAND OFF")
     endif()
 
+    # CPU INFOrmation library (pytorch/cpuinfo)
+    if(NOT TARGET cpuinfo::cpuinfo)
+        cpmaddpackage(
+            NAME
+            cpuinfo
+            GITHUB_REPOSITORY
+            "pytorch/cpuinfo"
+            GIT_TAG
+            main
+            OPTIONS
+            "CPUINFO_BUILD_TOOLS OFF"
+            "CPUINFO_BUILD_UNIT_TESTS OFF"
+            "CPUINFO_BUILD_MOCK_TESTS OFF"
+            "CPUINFO_BUILD_BENCHMARKS OFF")
+    endif()
+
 endfunction()

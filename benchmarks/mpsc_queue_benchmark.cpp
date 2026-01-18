@@ -12,6 +12,7 @@ namespace sigmax {
 MpscQueueBenchmark::MpscQueueBenchmark(const std::filesystem::path &benchmarkResultsPath) : m_benchmarkResultsPath(benchmarkResultsPath)
 {
     Logger::Init();
+    m_cpuInfo = GetCpuInfo();
 }
 
 template<typename QueueSize> bool MpscQueueBenchmark::RunBenchmark(const std::vector<int> &producerCount)
