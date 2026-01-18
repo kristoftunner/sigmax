@@ -1,18 +1,22 @@
 #pragma once
 
 #include "log.hpp"
+#include <vector>
 
 namespace sigmax {
 class MpscQueueBenchmark
 {
 public:
+    struct BenchmarkConfig
+    {
+        int numberOfThreads;
+        int queueSize;
+    };
     MpscQueueBenchmark();
-    ~MpscQueueBenchmark();
+    ~MpscQueueBenchmark() = default;
 
-    bool run();
-
-private:
-    void MPSCBenchmark();
+    template<typename QueueSize>
+    bool RunBenchmark(const std::vector<int> &producerCount);
 };
 
 

@@ -161,9 +161,7 @@ TEST_F(MpscQueueTest, MultipleConsumerTest1)
 /// \detail 3 producer and one consumer, overwriting the queue
 TEST_F(MpscQueueTest, MultipleConsumerTest2)
 {
-
     static constexpr int kQueueSize = 512;
-    MpscQueue<int, kQueueSize> queue;
     auto writer = [](MpscQueue<int, kQueueSize> &queue, const int valuesToWrite, std::promise<void> &ready, std::shared_future<void> &go) {
         ready.set_value();
         go.wait();
@@ -195,6 +193,7 @@ TEST_F(MpscQueueTest, MultipleConsumerTest2)
 
     std::promise<void> go, w1Ready, w2Ready, w3Ready, rReady;
     std::shared_future<void> ready(go.get_future().share());
+    MpscQueue<int, kQueueSize> queue;
     w1Done = std::async(std::launch::async, writer, std::ref(queue), kQueueSize, std::ref(w1Ready), std::ref(ready));
     w2Done = std::async(std::launch::async, writer, std::ref(queue), kQueueSize, std::ref(w2Ready), std::ref(ready));
     w3Done = std::async(std::launch::async, writer, std::ref(queue), kQueueSize, std::ref(w3Ready), std::ref(ready));

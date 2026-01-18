@@ -61,7 +61,7 @@ public:
             if (diff == 0L) {
                 if (m_tail.compare_exchange_strong(pos, pos + 1)) { break; }
             } else if (diff < 0L) {
-                return QueueState::QUEUE_IS_EMPTY;
+                return std::unexpected(QueueState::QUEUE_IS_EMPTY);
             } else {
                 pos = m_tail.load();
             }
