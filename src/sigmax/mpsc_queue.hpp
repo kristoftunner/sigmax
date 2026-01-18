@@ -49,6 +49,7 @@ public:
 
         m_data.at(pos % m_buffer_mask).data = element;
         m_data.at(pos % m_buffer_mask).sequence.store(pos + 1);
+        m_pushCount.fetch_add(1, std::memory_order_relaxed);
         return QueueState::SUCCESS;
     }
     /// \brief pushing back multiple elements to the queue
@@ -71,6 +72,7 @@ public:
         const auto data = m_data[pos % m_buffer_mask].data;
         m_data[pos % m_buffer_mask].sequence.store(
             pos + m_buffer_mask);// TODO: this might be a bug, the sequence should be incremented by the number of elements pushed
+        m_popCount.fetch_add(1, std::memory_order_relaxed);
         return data;
     }
 

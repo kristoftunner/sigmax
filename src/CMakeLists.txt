@@ -9,6 +9,7 @@ if(sigmax_ENABLE_TRACY)
 endif()
 
 target_include_directories(sigmax ${WARNING_GUARD} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/sigmax>)
+target_compile_options(sigmax PUBLIC -g -O0)
 
 set_target_properties(
     sigmax

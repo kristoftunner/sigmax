@@ -38,7 +38,7 @@ template<typename QueueSize> bool MpscQueueBenchmark::RunBenchmark(const std::ve
     std::vector<nlohmann::json> benchmarkResults;
     for (const auto &count : producerCount) {
         nlohmann::json singleBenchmarkResult;
-        singleBenchmarkResult["producerCount"] = producerCount;
+        singleBenchmarkResult["producerCount"] = count;
         singleBenchmarkResult["queueSize"] = QueueSize::value;
         QueueType queue;
         std::promise<void> go;
@@ -77,7 +77,9 @@ bool MpscQueueBenchmark::SaveBenchmarkResults(const std::vector<nlohmann::json> 
         std::ifstream in(m_benchmarkResultsPath);
         nlohmann::json existingBenchmarkResults;
         in >> existingBenchmarkResults;
-        finalBenchmarkResults["benchmarkResults"].push_back(existingBenchmarkResults["benchmarkResults"]);
+        for(const auto &result : existingBenchmarkResults["benchmarkResults"]) {
+            finalBenchmarkResults["benchmarkResults"].push_back(result);
+        }
     }
 
     std::ofstream out(m_benchmarkResultsPath);
@@ -99,7 +101,15 @@ int main()
     using namespace sigmax;
     std::vector<int> producerCount = { 1, 2, 4, 8, 16, 32, 64 };
     MpscQueueBenchmark benchmark(std::filesystem::path("benchmark_results.json"));
-    auto result = benchmark.RunBenchmark<std::integral_constant<int, 1024>>(producerCount);
+    auto result = benchmark.RunBenchmark<std::integral_constant<int, 64>>(producerCount);
+    result |= benchmark.RunBenchmark<std::integral_constant<int, 128>>(producerCount);
+    result |= benchmark.RunBenchmark<std::integral_constant<int, 256>>(producerCount);
+    result |= benchmark.RunBenchmark<std::integral_constant<int, 512>>(producerCount);
+    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024>>(producerCount);
+    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024 * 2>>(producerCount);
+    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024 * 4>>(producerCount);
+    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024 * 8>>(producerCount);
+    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024 * 10>>(producerCount);
     if (!result) {
         LOG_ERROR("Benchmark failed");
         return 1;

@@ -41,9 +41,6 @@ function(
             list(APPEND SANITIZERS "memory")
         endif()
     endif()
-    if(${ENABLE_SANITIZER_ADDRESS})
-        list(APPEND SANITIZERS "address")
-    endif()
 
     list(
         JOIN
