@@ -4,9 +4,7 @@ target_link_libraries(sigmax PUBLIC sigmax_options sigmax_warnings spdlog::spdlo
 
 # Optionally link Tracy profiler
 target_link_libraries(sigmax PUBLIC Tracy::TracyClient)
-if(sigmax_ENABLE_TRACY)
-    target_compile_definitions(sigmax PUBLIC TRACY_ENABLE)
-endif()
+target_compile_definitions(sigmax PUBLIC $<$<CONFIG:Debug>:TRACY_ENABLE>)
 
 target_include_directories(sigmax ${WARNING_GUARD} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/sigmax>)
 target_compile_options(sigmax PUBLIC -g -O0)

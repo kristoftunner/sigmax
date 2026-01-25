@@ -87,6 +87,18 @@ def _format_cache(cache: Any) -> str:
     return f"{size}{extra_str}"
 
 
+def _queue_size_kb(queue_size: Any) -> float:
+    # Use decimal kilobytes for queue size labels.
+    return float(queue_size) / 1024.0
+
+
+def _queue_size_kb_label(queue_size: Any) -> str:
+    kb = _queue_size_kb(queue_size)
+    if kb.is_integer():
+        return str(int(kb))
+    return f"{kb:.2f}"
+
+
 def _render_cpuinfo_html(cpu_info: Any) -> str:
     if not isinstance(cpu_info, dict) or not cpu_info:
         return ""
@@ -212,7 +224,7 @@ def plot_queue_size_effect(by_queue_size) -> go.Figure:
             # Find matching entry
             for entry in by_queue_size[queue_size]:
                 if entry['producerCount'] == producer_count:
-                    queue_sizes.append(queue_size)
+                    queue_sizes.append(_queue_size_kb(queue_size))
                     throughputs.append(entry['throughput'])
                     break
         
@@ -228,8 +240,8 @@ def plot_queue_size_effect(by_queue_size) -> go.Figure:
                 )
             )
 
-    tick_vals = sorted(by_queue_size.keys())
-    tick_text = [str(qs) for qs in tick_vals]
+    tick_vals = [_queue_size_kb(qs) for qs in sorted(by_queue_size.keys())]
+    tick_text = [_queue_size_kb_label(qs) for qs in sorted(by_queue_size.keys())]
 
     fig.update_layout(
         template="plotly_white",
@@ -240,7 +252,7 @@ def plot_queue_size_effect(by_queue_size) -> go.Figure:
         margin=dict(l=80, r=40, t=90, b=120),
     )
     fig.update_xaxes(
-        title_text="Queue Size",
+        title_text="Queue Size (kB)",
         type="log",
         tickmode="array",
         tickvals=tick_vals,
@@ -284,7 +296,7 @@ def plot_producer_count_effect(by_producer_count) -> go.Figure:
                     x=producer_counts,
                     y=throughputs,
                     mode="lines+markers",
-                    name=f"Queue size: {queue_size}",
+                    name=f"Queue size: {_queue_size_kb_label(queue_size)} kB",
                     line={"width": 2, "color": colors[i % len(colors)]},
                     marker={"size": 9, "symbol": "square"},
                 )
@@ -335,14 +347,14 @@ def plot_heatmap(results) -> go.Figure:
     fig = go.Figure(
         data=go.Heatmap(
             z=throughput_matrix,
-            x=[str(qs) for qs in queue_sizes],
+            x=[_queue_size_kb_label(qs) for qs in queue_sizes],
             y=[str(pc) for pc in producer_counts],
             colorscale="YlOrRd",
             colorbar={"title": "Throughput (MOps/sec)"},
             text=text,
             texttemplate="%{text}",
             textfont={"size": 10, "color": "black"},
-            hovertemplate="Producer Count=%{y}<br>Queue Size=%{x}<br>Throughput=%{z:.4f} MOps/sec<extra></extra>",
+            hovertemplate="Producer Count=%{y}<br>Queue Size=%{x} kB<br>Throughput=%{z:.4f} MOps/sec<extra></extra>",
         )
     )
 
@@ -353,7 +365,7 @@ def plot_heatmap(results) -> go.Figure:
         title="Throughput Heatmap<br>(MOps/sec measured in 1 second)",
         margin=dict(l=90, r=40, t=90, b=80),
     )
-    fig.update_xaxes(title_text="Queue Size")
+    fig.update_xaxes(title_text="Queue Size (kB)")
     fig.update_yaxes(title_text="Producer Count")
 
     return fig

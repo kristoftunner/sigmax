@@ -114,7 +114,6 @@ macro(sigmax_setup_options)
     endif()
 
     option(sigmax_BUILD_FUZZ_TESTS "Enable fuzz testing executable" ${DEFAULT_FUZZER})
-    option(sigmax_ENABLE_TRACY "Enable Tracy profiler integration" ON)
 
     # print all selected options:
     message("--------------------------------")
@@ -132,7 +131,6 @@ macro(sigmax_setup_options)
     message("-- sigmax_ENABLE_CPPCHECK: ${sigmax_ENABLE_CPPCHECK}")
     message("-- sigmax_ENABLE_COVERAGE: ${sigmax_ENABLE_COVERAGE}")
     message("-- sigmax_ENABLE_CACHE: ${sigmax_ENABLE_CACHE}")
-    message("-- sigmax_ENABLE_TRACY: ${sigmax_ENABLE_TRACY}")
 
 
 endmacro()

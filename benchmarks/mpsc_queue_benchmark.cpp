@@ -40,7 +40,7 @@ template<typename QueueSize> bool MpscQueueBenchmark::RunBenchmark(const std::ve
     for (const auto &count : producerCount) {
         nlohmann::json singleBenchmarkResult;
         singleBenchmarkResult["producerCount"] = count;
-        singleBenchmarkResult["queueSize"] = QueueSize::value;
+        singleBenchmarkResult["queueSize"] = QueueSize::value * sizeof(typename QueueType::value_type);
         QueueType queue;
         std::promise<void> go;
         std::shared_future<void> ready(go.get_future().share());

@@ -23,6 +23,7 @@ enum class QueueState : std::uint8_t { SUCCESS, QUEUE_IS_EMPTY, QUEUE_IS_FULL };
 template<typename T, std::size_t C> class MpscQueue
 {
 public:
+    using value_type = T;
     MpscQueue() : m_buffer_mask(C)
     {
         for (std::size_t i{ 0 }; i < C; i++) { m_data[i].sequence.store(i); }
