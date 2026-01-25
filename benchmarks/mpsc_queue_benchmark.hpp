@@ -1,7 +1,12 @@
 #pragma once
 
-#include "log.hpp"
+#include <filesystem>
 #include <vector>
+
+#include <nlohmann/json.hpp>
+
+#include "log.hpp"
+#include "benchmark_utils.hpp"
 
 namespace sigmax {
 class MpscQueueBenchmark
@@ -12,11 +17,15 @@ public:
         int numberOfThreads;
         int queueSize;
     };
-    MpscQueueBenchmark();
+    MpscQueueBenchmark(const std::filesystem::path &benchmarkResultsPath);
     ~MpscQueueBenchmark() = default;
 
-    template<typename QueueSize>
-    bool RunBenchmark(const std::vector<int> &producerCount);
+    template<typename QueueSize> bool RunBenchmark(const std::vector<int> &producerCount);
+private:
+    bool SaveBenchmarkResults(const std::vector<nlohmann::json> &benchmarkResults) const;
+
+    std::filesystem::path m_benchmarkResultsPath;
+    CpuInfo m_cpuInfo;
 };
 
 

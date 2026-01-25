@@ -4,7 +4,8 @@
 #include <atomic>
 #include <cstdint>
 #include <expected>
-#include <iostream>
+
+#include <tracy/Tracy.hpp>
 
 #include "log.hpp"
 
@@ -21,6 +22,7 @@ enum class QueueState : std::uint8_t { SUCCESS, QUEUE_IS_EMPTY, QUEUE_IS_FULL };
 template<typename T, std::size_t C> class MpscQueue
 {
 public:
+    using value_type = T;
     MpscQueue() : m_buffer_mask(C)
     {
         for (std::size_t i{ 0 }; i < C; i++) { m_data[i].sequence.store(i); }
@@ -30,6 +32,7 @@ public:
     /// \brief pushing back a single element
     QueueState PushBack(const T &element)
     {
+        ZoneScopedN("MpscQueue::Push");
         auto pos = m_head.load();
         while (true) {
             const auto seq = m_data.at(pos % m_buffer_mask).sequence.load();
@@ -46,7 +49,7 @@ public:
 
         m_data.at(pos % m_buffer_mask).data = element;
         m_data.at(pos % m_buffer_mask).sequence.store(pos + 1);
-        m_pushCount.fetch_add(1, std::memory_order_release);
+        m_pushCount.fetch_add(1, std::memory_order_relaxed);
         return QueueState::SUCCESS;
     }
     /// \brief pushing back multiple elements to the queue
@@ -54,6 +57,7 @@ public:
     /// \brief Pops out all the elements from the queue using a single read
     std::expected<T, QueueState> Pop()
     {
+        ZoneScopedN("MpscQueue::Pop");
         auto pos = m_tail.load();
         while (true) {
             const auto seq = m_data[pos % m_buffer_mask].sequence.load();
@@ -67,8 +71,9 @@ public:
             }
         }
         const auto data = m_data[pos % m_buffer_mask].data;
-        m_data[pos % m_buffer_mask].sequence.store(pos + m_buffer_mask); // TODO: this might be a bug, the sequence should be incremented by the number of elements pushed
-        m_popCount.fetch_add(1, std::memory_order_release);
+        m_data[pos % m_buffer_mask].sequence.store(
+            pos + m_buffer_mask);// TODO: this might be a bug, the sequence should be incremented by the number of elements pushed
+        m_popCount.fetch_add(1, std::memory_order_relaxed);
         return data;
     }
 

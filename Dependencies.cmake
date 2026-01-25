@@ -39,4 +39,48 @@ function(sigmax_setup_dependencies)
         cpmaddpackage("gh:lefticus/tools#update_build_system")
     endif()
 
+    # nlohmann/json - header-only JSON library
+    if(NOT TARGET nlohmann_json::nlohmann_json)
+        cpmaddpackage(
+            NAME
+            nlohmann_json
+            VERSION
+            3.12.0
+            GITHUB_REPOSITORY
+            "nlohmann/json"
+            OPTIONS
+            "JSON_BuildTests OFF"
+            "JSON_Install OFF")
+    endif()
+
+    # Tracy profiler
+    if(NOT TARGET Tracy::TracyClient)
+        cpmaddpackage(
+            NAME
+            tracy
+            GITHUB_REPOSITORY
+            "wolfpld/tracy"
+            VERSION
+            0.13.1
+            OPTIONS
+            "TRACY_ENABLE ON"
+            "TRACY_ON_DEMAND OFF")
+    endif()
+
+    # CPU INFOrmation library (pytorch/cpuinfo)
+    if(NOT TARGET cpuinfo::cpuinfo)
+        cpmaddpackage(
+            NAME
+            cpuinfo
+            GITHUB_REPOSITORY
+            "pytorch/cpuinfo"
+            GIT_TAG
+            main
+            OPTIONS
+            "CPUINFO_BUILD_TOOLS OFF"
+            "CPUINFO_BUILD_UNIT_TESTS OFF"
+            "CPUINFO_BUILD_MOCK_TESTS OFF"
+            "CPUINFO_BUILD_BENCHMARKS OFF")
+    endif()
+
 endfunction()
