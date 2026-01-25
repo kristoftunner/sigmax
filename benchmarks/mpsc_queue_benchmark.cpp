@@ -12,7 +12,7 @@ namespace sigmax {
 MpscQueueBenchmark::MpscQueueBenchmark(const std::filesystem::path &benchmarkResultsPath) : m_benchmarkResultsPath(benchmarkResultsPath)
 {
     Logger::Init();
-    m_cpuInfo = GetCpuInfo();
+    m_cpuInfo.QueryCpuInfo();
 }
 
 template<typename QueueSize> bool MpscQueueBenchmark::RunBenchmark(const std::vector<int> &producerCount)
@@ -82,7 +82,7 @@ bool MpscQueueBenchmark::SaveBenchmarkResults(const std::vector<nlohmann::json> 
             finalBenchmarkResults["benchmarkResults"].push_back(result);
         }
     }
-
+    finalBenchmarkResults["cpuInfo"] = m_cpuInfo.ToJson();
     std::ofstream out(m_benchmarkResultsPath);
     if(!out) {
         LOG_ERROR("Failed to open file for saving benchmark results");

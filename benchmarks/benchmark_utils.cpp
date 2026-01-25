@@ -1,23 +1,27 @@
 #include "benchmark_utils.hpp"
 
+#include <sys/param.h>
+#include <unistd.h>
 #include "log.hpp"
 #include <cstdint>
 
 namespace sigmax {
 
-CpuInfo GetCpuInfo()
+void CpuInfo::QueryCpuInfo()
 {
+    if (intialized) {
+        LOG_WARN("CpuInfo already initialized, skipping initialization");
+        return;
+    }
     cpuinfo_initialize();
-    CpuInfo cpuInfo{};
-    cpuInfo.coreInfo = *cpuinfo_get_core(0);
-    cpuInfo.packageInfo = *cpuinfo_get_package(0);
-    // assuming the caches are identical for all cores
-    cpuInfo.l1iCache = *cpuinfo_get_l1i_cache(0);
-    cpuInfo.l1dCache = *cpuinfo_get_l1d_cache(0);
-    cpuInfo.l2Cache = *cpuinfo_get_l2_cache(0);
-    cpuInfo.l3Cache = *cpuinfo_get_l3_cache(0);
-    cpuInfo.intialized = true;
-    return cpuInfo;
+    coreInfo = *cpuinfo_get_core(0);
+    packageInfo = *cpuinfo_get_package(0);
+    l1iCache = *cpuinfo_get_l1i_cache(0);
+    l1dCache = *cpuinfo_get_l1d_cache(0);
+    l2Cache = *cpuinfo_get_l2_cache(0);
+    l3Cache = *cpuinfo_get_l3_cache(0);
+    pageSize = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
+    intialized = true;
 }
 
 nlohmann::json CpuInfo::ToJson() const
@@ -30,6 +34,7 @@ nlohmann::json CpuInfo::ToJson() const
     json["l2Cache"] = CacheToJson(l2Cache);
     json["l3Cache"] = CacheToJson(l3Cache);
     json["coresPerSocket"] = packageInfo.core_count;
+    json["pageSize"] = pageSize;
     return json;
 }
 
