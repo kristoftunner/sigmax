@@ -101,7 +101,7 @@ int main()
 {
     using namespace sigmax;
     std::vector<int> producerCount = { 1, 2, 4, 8, 16, 32, 64 };
-    MpscQueueBenchmark benchmark(std::filesystem::path("benchmark_results.json"));
+    MpscQueueBenchmark benchmark(std::filesystem::path("results/benchmark_results.json"));
     auto result = benchmark.RunBenchmark<std::integral_constant<int, 64>>(producerCount);
     result |= benchmark.RunBenchmark<std::integral_constant<int, 128>>(producerCount);
     result |= benchmark.RunBenchmark<std::integral_constant<int, 256>>(producerCount);

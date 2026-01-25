@@ -9,15 +9,22 @@ import json
 import plotly.graph_objects as go  # type: ignore[import-not-found]
 import plotly.express as px  # type: ignore[import-not-found]
 import plotly.io as pio  # type: ignore[import-not-found]
-from typing import List
+from html import escape as html_escape
+from typing import Any, List
 from pathlib import Path
 from collections import defaultdict
+import logging
 
 
-def load_benchmark_data(json_path):
-    """Load benchmark results from JSON file."""
+def load_benchmark_json(json_path: Path) -> dict[str, Any]:
+    """Load the full benchmark JSON payload."""
     with open(json_path, 'r') as f:
-        data = json.load(f)
+        return json.load(f)
+
+
+def load_benchmark_data(json_path: Path) -> list[dict[str, Any]]:
+    """Load benchmark results list from JSON file."""
+    data = load_benchmark_json(json_path)
     return data['benchmarkResults']
 
 
@@ -53,19 +60,97 @@ def organize_data(results):
     return by_queue_size, by_producer_count
 
 
-def write_html_report(figures: List[go.Figure], output_path: Path) -> None:
+def _format_bytes(n: Any) -> str:
+    try:
+        value = int(n)
+    except Exception:
+        return str(n)
+    if value < 1024:
+        return f"{value} B"
+    if value < 1024 * 1024:
+        return f"{value / 1024:.1f} KiB"
+    return f"{value / (1024 * 1024):.1f} MiB"
+
+
+def _format_cache(cache: Any) -> str:
+    if not isinstance(cache, dict):
+        return str(cache)
+    size = _format_bytes(cache.get("size"))
+    line_size = cache.get("line_size")
+    assoc = cache.get("associativity")
+    extras: list[str] = []
+    if line_size is not None:
+        extras.append(f"line {line_size} B")
+    if assoc is not None:
+        extras.append(f"assoc {assoc}")
+    extra_str = f" ({', '.join(extras)})" if extras else ""
+    return f"{size}{extra_str}"
+
+
+def _render_cpuinfo_html(cpu_info: Any) -> str:
+    if not isinstance(cpu_info, dict) or not cpu_info:
+        return ""
+
+    vendor = cpu_info.get("vendor")
+    uarch = cpu_info.get("uarch")
+    cores = cpu_info.get("coresPerSocket")
+    page_size = cpu_info.get("pageSize")
+
+    rows: list[tuple[str, str]] = []
+    if vendor is not None:
+        rows.append(("Vendor", str(vendor)))
+    if uarch is not None:
+        rows.append(("Microarchitecture", str(uarch)))
+    if cores is not None:
+        rows.append(("Cores per socket", str(cores)))
+    if page_size is not None:
+        rows.append(("Page size", _format_bytes(page_size)))
+
+    # Cache details (if present)
+    if "l1iCache" in cpu_info:
+        rows.append(("L1I cache", _format_cache(cpu_info.get("l1iCache"))))
+    if "l1dCache" in cpu_info:
+        rows.append(("L1D cache", _format_cache(cpu_info.get("l1dCache"))))
+    if "l2Cache" in cpu_info:
+        rows.append(("L2 cache", _format_cache(cpu_info.get("l2Cache"))))
+    if "l3Cache" in cpu_info:
+        rows.append(("L3 cache", _format_cache(cpu_info.get("l3Cache"))))
+
+    table_rows = "\n".join(
+        f"<tr><th>{html_escape(k)}</th><td>{html_escape(v)}</td></tr>" for k, v in rows
+    )
+    raw_json = html_escape(json.dumps(cpu_info, indent=2, sort_keys=True))
+
+    return f"""
+      <section class="cpuinfo">
+        <h2>CPU Info</h2>
+        <table class="kv">
+          <tbody>
+            {table_rows}
+          </tbody>
+        </table>
+        <details>
+          <summary>Raw cpuInfo JSON</summary>
+          <pre class="code">{raw_json}</pre>
+        </details>
+      </section>
+    """
+
+
+def write_html_report(figures: List[go.Figure], output_path: Path, cpu_info: Any = None) -> None:
     """Write a single HTML report containing multiple Plotly figures."""
     parts: List[str] = []
     for i, fig in enumerate(figures):
         parts.append(
             pio.to_html(
                 fig,
-                include_plotlyjs=("cdn" if i == 0 else False),
+                include_plotlyjs=("cdn" if i == 0 else False),  # type: ignore[arg-type]
                 full_html=False,
             )
         )
 
     figures_html = "\n".join(f'<div class="figure">{p}</div>' for p in parts)
+    cpu_html = _render_cpuinfo_html(cpu_info)
 
     html = f"""<!doctype html>
 <html lang="en">
@@ -76,20 +161,33 @@ def write_html_report(figures: List[go.Figure], output_path: Path) -> None:
     <style>
       body {{ font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; }}
       .container {{ max-width: 1200px; margin: 0 auto; }}
-      .figure {{ margin: 28px 0; }}
+      .figures {{ display: flex; flex-direction: column; gap: 48px; }}
+      .figure {{ margin: 0; }}
+      h2 {{ margin: 1.25rem 0 0.75rem; }}
+      .cpuinfo {{ margin: 1rem 0 1.75rem; padding: 16px; border: 1px solid #e6e6e6; border-radius: 10px; background: #fafafa; }}
+      table.kv {{ border-collapse: collapse; width: 100%; }}
+      table.kv th {{ text-align: left; font-weight: 600; color: #333; padding: 8px 10px; width: 220px; vertical-align: top; }}
+      table.kv td {{ padding: 8px 10px; color: #111; }}
+      table.kv tr + tr th, table.kv tr + tr td {{ border-top: 1px solid #ededed; }}
+      details {{ margin-top: 12px; }}
+      details summary {{ cursor: pointer; color: #333; }}
+      pre.code {{ margin: 10px 0 0; padding: 12px; background: #fff; border: 1px solid #eee; border-radius: 8px; overflow: auto; }}
     </style>
   </head>
   <body>
     <div class="container">
       <h1>Benchmark Visualizations</h1>
-      {figures_html}
+      {cpu_html}
+      <div class="figures">
+        {figures_html}
+      </div>
     </div>
   </body>
 </html>
 """
 
     output_path.write_text(html, encoding="utf-8")
-    print(f"Saved: {output_path}")
+    logging.info(f"Saved: {output_path}")
 
 
 def plot_queue_size_effect(by_queue_size) -> go.Figure:
@@ -202,7 +300,7 @@ def plot_producer_count_effect(by_producer_count) -> go.Figure:
         title="Effect of Producer Count on Throughput<br>(by Queue Size)",
         legend_title_text="Queue Size",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-        margin=dict(l=80, r=40, t=90, b=80),
+        margin=dict(l=80, r=40, t=200, b=80),
     )
     fig.update_xaxes(
         title_text="Producer Count",
@@ -262,32 +360,35 @@ def plot_heatmap(results) -> go.Figure:
 
 
 def main():
+    logging.basicConfig(level=logging.INFO)
     # Get script directory and project root
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
-    json_path = project_root / 'benchmark_results.json'
-    output_dir = script_dir
+    json_path = project_root / 'results' / 'benchmark_results.json'
+    output_dir = project_root / 'results'
     
     if not json_path.exists():
-        print(f"Error: {json_path} not found!")
+        logging.error(f"Error: {json_path} not found!")
         return
     
-    print(f"Loading benchmark data from {json_path}...")
-    results = load_benchmark_data(json_path)
-    print(f"Loaded {len(results)} benchmark results")
+    logging.info(f"Loading benchmark data from {json_path}...")
+    payload = load_benchmark_json(json_path)
+    results = payload["benchmarkResults"]
+    cpu_info = payload.get("cpuInfo")
+    logging.info(f"Loaded {len(results)} benchmark results")
     
     # Organize data
     by_queue_size, by_producer_count = organize_data(results)
     
     # Create visualizations
-    print("\nGenerating visualizations...")
+    logging.info("\nGenerating visualizations...")
     queue_size_fig = plot_queue_size_effect(by_queue_size)
     producer_count_fig = plot_producer_count_effect(by_producer_count)
     heatmap_fig = plot_heatmap(results)
 
     output_path = output_dir / "benchmark_visualizations.html"
-    write_html_report([queue_size_fig, producer_count_fig, heatmap_fig], output_path)
-    print("\nAll visualizations saved to scripts/ directory!")
+    write_html_report([queue_size_fig, producer_count_fig, heatmap_fig], output_path, cpu_info=cpu_info)
+    logging.info("\nAll visualizations saved to scripts/ directory!")
 
 
 if __name__ == '__main__':
