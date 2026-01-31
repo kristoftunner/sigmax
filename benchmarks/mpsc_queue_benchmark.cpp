@@ -109,6 +109,8 @@ int main(int argc, char *argv[])
         .help("Queue size, possible values: 32, 64, 128, 256, 512, 1024, 1024*2, 1024*4, 1024*8, 1024*10")
         .default_value(32)
         .scan<'i', int>();
+    program.add_epilog("Example: benchmark_test -q 32 -r results/mpsc_queue_benchmark.json");
+    program.add_description("Benchmark the MPSC queue");
     try {
         program.parse_args(argc, argv);
     } catch (const std::exception &e) {
