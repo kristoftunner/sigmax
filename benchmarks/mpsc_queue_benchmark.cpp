@@ -5,8 +5,11 @@
 #include <future>
 #include <thread>
 
+#include <argparse/argparse.hpp>
+
 #include "mpsc_queue.hpp"
 #include "order_type.hpp"
+
 
 namespace sigmax {
 MpscQueueBenchmark::MpscQueueBenchmark(const std::filesystem::path &benchmarkResultsPath) : m_benchmarkResultsPath(benchmarkResultsPath)
@@ -63,7 +66,7 @@ template<typename QueueSize> bool MpscQueueBenchmark::RunBenchmark(const std::ve
     }
 
 
-    if(!SaveBenchmarkResults(benchmarkResults)) {
+    if (!SaveBenchmarkResults(benchmarkResults)) {
         LOG_ERROR("Failed to save benchmark results");
         return false;
     }
@@ -74,17 +77,17 @@ bool MpscQueueBenchmark::SaveBenchmarkResults(const std::vector<nlohmann::json> 
 {
     nlohmann::json finalBenchmarkResults;
     finalBenchmarkResults["benchmarkResults"] = benchmarkResults;
-    if(std::filesystem::exists(m_benchmarkResultsPath)) {
+    if (std::filesystem::exists(m_benchmarkResultsPath)) {
         std::ifstream in(m_benchmarkResultsPath);
         nlohmann::json existingBenchmarkResults;
         in >> existingBenchmarkResults;
-        for(const auto &result : existingBenchmarkResults["benchmarkResults"]) {
+        for (const auto &result : existingBenchmarkResults["benchmarkResults"]) {
             finalBenchmarkResults["benchmarkResults"].push_back(result);
         }
     }
     finalBenchmarkResults["cpuInfo"] = m_cpuInfo.ToJson();
     std::ofstream out(m_benchmarkResultsPath);
-    if(!out) {
+    if (!out) {
         LOG_ERROR("Failed to open file for saving benchmark results");
         return false;
     }
@@ -97,20 +100,63 @@ bool MpscQueueBenchmark::SaveBenchmarkResults(const std::vector<nlohmann::json> 
 
 }// namespace sigmax
 
-int main()
+using namespace sigmax;
+
+int main(int argc, char *argv[])
 {
-    using namespace sigmax;
+    argparse::ArgumentParser program("benchmark_test");
+    program.add_argument("-q", "--queue-size")
+        .help("Queue size, possible values: 32, 64, 128, 256, 512, 1024, 1024*2, 1024*4, 1024*8, 1024*10")
+        .default_value(32)
+        .scan<'i', int>();
+    try {
+        program.parse_args(argc, argv);
+    } catch (const std::exception &e) {
+        LOG_ERROR("Error: {}", e.what());
+        return 1;
+    }
+
     std::vector<int> producerCount = { 1, 2, 4, 8, 16, 32, 64 };
-    MpscQueueBenchmark benchmark(std::filesystem::path("results/benchmark_results.json"));
-    auto result = benchmark.RunBenchmark<std::integral_constant<int, 64>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 128>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 256>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 512>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024 * 2>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024 * 4>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024 * 8>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024 * 10>>(producerCount);
+    MpscQueueBenchmark benchmark(program.get<std::filesystem::path>("--results-path"));
+    int queueSize = program.get<int>("--queue-size");
+
+    bool result = false;
+    switch (queueSize) {
+    case 32:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 32>>(producerCount);
+        break;
+    case 64:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 64>>(producerCount);
+        break;
+    case 128:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 128>>(producerCount);
+        break;
+    case 256:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 256>>(producerCount);
+        break;
+    case 512:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 512>>(producerCount);
+        break;
+    case 1024:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 1024>>(producerCount);
+        break;
+    case 1024 * 2:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 1024 * 2>>(producerCount);
+        break;
+    case 1024 * 4:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 1024 * 4>>(producerCount);
+        break;
+    case 1024 * 8:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 1024 * 8>>(producerCount);
+        break;
+    case 1024 * 10:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 1024 * 10>>(producerCount);
+        break;
+    default:
+        LOG_ERROR("Invalid queue size");
+        return 1;
+    }
+
     if (!result) {
         LOG_ERROR("Benchmark failed");
         return 1;

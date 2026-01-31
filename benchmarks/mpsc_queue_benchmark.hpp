@@ -5,8 +5,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "log.hpp"
 #include "benchmark_utils.hpp"
+#include "log.hpp"
 
 namespace sigmax {
 class MpscQueueBenchmark
@@ -21,6 +21,7 @@ public:
     ~MpscQueueBenchmark() = default;
 
     template<typename QueueSize> bool RunBenchmark(const std::vector<int> &producerCount);
+
 private:
     bool SaveBenchmarkResults(const std::vector<nlohmann::json> &benchmarkResults) const;
 
