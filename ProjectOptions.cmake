@@ -58,7 +58,7 @@ macro(sigmax_setup_options)
 
     message("PROJECT_IS_TOP_LEVEL is: ${PROJECT_IS_TOP_LEVEL}")
     message("sigmax_PACKAGING_MAINTAINER_MODE is: ${sigmax_PACKAGING_MAINTAINER_MODE}")
-    if(NOT PROJECT_IS_TOP_LEVEL OR sigmax_PACKAGING_MAINTAINER_MODE)
+    if(NOT PROJECT_IS_TOP_LEVEL OR sigmax_PACKAGING_MAINTAINER_MODE OR CMAKE_BUILD_TYPE MATCHES "Release")
         option(sigmax_ENABLE_IPO "Enable IPO/LTO" OFF)
         option(sigmax_WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
         option(sigmax_ENABLE_USER_LINKER "Enable user-selected linker" OFF)

@@ -5,7 +5,9 @@ Shows the effect of queue size and producer count on throughput.
 All measurements are taken within 1 second, so successfulPops represents throughput (MOps/sec).
 """
 
+import argparse
 import json
+import re
 import plotly.graph_objects as go  # type: ignore[import-not-found]
 import plotly.express as px  # type: ignore[import-not-found]
 import plotly.io as pio  # type: ignore[import-not-found]
@@ -14,6 +16,9 @@ from typing import Any, List
 from pathlib import Path
 from collections import defaultdict
 import logging
+
+# Glob pattern for per-queue-size result files produced by run_benchmarks.sh
+BENCHMARK_RESULTS_GLOB = 'benchmark_results_q*.json'
 
 
 def load_benchmark_json(json_path: Path) -> dict[str, Any]:
@@ -28,6 +33,35 @@ def load_benchmark_data(json_path: Path) -> list[dict[str, Any]]:
     return data['benchmarkResults']
 
 
+def _queue_size_from_filename(path: Path) -> int:
+    """Extract queue size from benchmark_results_q<N>.json filename for ordering."""
+    match = re.search(r'benchmark_results_q(\d+)\.json', path.name)
+    return int(match.group(1)) if match else 0
+
+
+def load_all_benchmark_results(results_dir: Path) -> tuple[list[dict[str, Any]], Any]:
+    """
+    Load all benchmark_results_q<size>.json files from results_dir and merge them.
+    Returns (combined_benchmark_results, cpu_info from first file).
+    """
+    paths = sorted(results_dir.glob(BENCHMARK_RESULTS_GLOB), key=_queue_size_from_filename)
+    if not paths:
+        return [], None
+
+    combined: list[dict[str, Any]] = []
+    cpu_info: Any = None
+
+    for p in paths:
+        payload = load_benchmark_json(p)
+        results = payload.get('benchmarkResults', [])
+        combined.extend(results)
+        if cpu_info is None and payload.get('cpuInfo') is not None:
+            cpu_info = payload['cpuInfo']
+        logging.info("Loaded %s: %d results", p.name, len(results))
+
+    return combined, cpu_info
+
+
 def organize_data(results):
     """Organize data by queue size and producer count."""
     by_queue_size = defaultdict(list)
@@ -38,7 +72,7 @@ def organize_data(results):
         producer_count = result['producerCount']
         # All measurements are taken within 1 second, so successfulPops is ops/sec.
         # Convert to MOps/sec for nicer plots / consistency.
-        throughput = result['successfulPops'] / 1e6
+        throughput = result['successfulPops'] / 0.5e6 # 0.5 seconds is the duration of the benchmark
         
         by_queue_size[queue_size].append({
             'producerCount': producer_count,
@@ -340,7 +374,7 @@ def plot_heatmap(results) -> go.Figure:
     for result in results:
         qs_idx = qs_idx_map[result['queueSize']]
         pc_idx = pc_idx_map[result['producerCount']]
-        throughput_matrix[pc_idx][qs_idx] = result['successfulPops'] / 1e6
+        throughput_matrix[pc_idx][qs_idx] = result['successfulPops'] / 0.5e6
 
     text = [[f"{v:.4f}" for v in row] for row in throughput_matrix]
 
@@ -373,35 +407,60 @@ def plot_heatmap(results) -> go.Figure:
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    # Get script directory and project root
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
-    json_path = project_root / 'results' / 'benchmark_results.json'
-    output_dir = project_root / 'results'
-    
-    if not json_path.exists():
-        logging.error(f"Error: {json_path} not found!")
-        return
-    
-    logging.info(f"Loading benchmark data from {json_path}...")
-    payload = load_benchmark_json(json_path)
-    results = payload["benchmarkResults"]
-    cpu_info = payload.get("cpuInfo")
-    logging.info(f"Loaded {len(results)} benchmark results")
-    
+    default_results_dir = project_root / 'results'
+    default_output = project_root / 'results' / 'benchmark_visualizations.html'
+
+    parser = argparse.ArgumentParser(
+        description='Visualize MPSC queue benchmark results. '
+        'By default loads all benchmark_results_q<size>.json from the results directory.'
+    )
+    parser.add_argument(
+        '-i', '--input',
+        type=Path,
+        default=None,
+        help='Input: either a directory (load all benchmark_results_q*.json) or a single JSON file'
+    )
+    parser.add_argument('-o', '--output', type=Path, default=default_output,
+                        help=f'Output HTML path (default: {default_output})')
+    args = parser.parse_args()
+
+    input_path = args.input if args.input is not None else default_results_dir
+    output_path = args.output
+
+    if not input_path.exists():
+        logging.error("Error: %s not found!", input_path)
+        return 1
+
+    if input_path.is_dir():
+        logging.info("Loading all benchmark results from %s (%s)...", input_path, BENCHMARK_RESULTS_GLOB)
+        results, cpu_info = load_all_benchmark_results(input_path)
+        if not results:
+            logging.error("Error: no %s files found in %s", BENCHMARK_RESULTS_GLOB, input_path)
+            return 1
+        logging.info("Total: %d benchmark results from all queue sizes", len(results))
+    else:
+        logging.info("Loading benchmark data from %s...", input_path)
+        payload = load_benchmark_json(input_path)
+        results = payload["benchmarkResults"]
+        cpu_info = payload.get("cpuInfo")
+        logging.info("Loaded %d benchmark results", len(results))
+
     # Organize data
     by_queue_size, by_producer_count = organize_data(results)
-    
+
     # Create visualizations
     logging.info("\nGenerating visualizations...")
     queue_size_fig = plot_queue_size_effect(by_queue_size)
     producer_count_fig = plot_producer_count_effect(by_producer_count)
     heatmap_fig = plot_heatmap(results)
 
-    output_path = output_dir / "benchmark_visualizations.html"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     write_html_report([queue_size_fig, producer_count_fig, heatmap_fig], output_path, cpu_info=cpu_info)
-    logging.info("\nAll visualizations saved to scripts/ directory!")
+    logging.info("\nAll visualizations saved to %s", output_path)
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

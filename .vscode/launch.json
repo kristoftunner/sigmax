@@ -5,7 +5,7 @@
             "request": "launch",
             "name": "benchmark_test",
             "program": "${workspaceFolder}/build/benchmarks/benchmark_test",
-            "args": [],
+            "args": ["-q", "32"],
             "cwd": "${workspaceFolder}"
         },
         {

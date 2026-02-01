@@ -55,7 +55,7 @@ template<typename QueueSize> bool MpscQueueBenchmark::RunBenchmark(const std::ve
         auto readerFut = std::async(std::launch::async, reader, std::ref(queue), std::ref(ready), std::ref(stop));
         go.set_value();
 
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         stop = true;
         auto [popCount, successfulPops] = readerFut.get();
         singleBenchmarkResult["totalPops"] = popCount;
@@ -109,6 +109,10 @@ int main(int argc, char *argv[])
         .help("Queue size, possible values: 32, 64, 128, 256, 512, 1024, 1024*2, 1024*4, 1024*8, 1024*10")
         .default_value(32)
         .scan<'i', int>();
+    program.add_argument("-r", "--results-path")
+        .help("Path to write benchmark results JSON")
+        .default_value(std::string("results/benchmark_results.json"))
+        .required();
     program.add_epilog("Example: benchmark_test -q 32 -r results/mpsc_queue_benchmark.json");
     program.add_description("Benchmark the MPSC queue");
     try {
@@ -119,7 +123,8 @@ int main(int argc, char *argv[])
     }
 
     std::vector<int> producerCount = { 1, 2, 4, 8, 16, 32, 64 };
-    MpscQueueBenchmark benchmark(program.get<std::filesystem::path>("--results-path"));
+    std::filesystem::path resultsPath = program.get<std::string>("--results-path");
+    MpscQueueBenchmark benchmark(resultsPath);
     int queueSize = program.get<int>("--queue-size");
 
     bool result = false;

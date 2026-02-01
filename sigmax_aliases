@@ -1,0 +1,8 @@
+DIRNAME="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+alias build=${DIRNAME}/build.sh
+alias configure=${DIRNAME}/configure.sh
+alias clean_rebuild=${DIRNAME}/clean_rebuild.sh
+alias run_benchmarks=${DIRNAME}/scripts/run_benchmarks.sh
+alias format_cmake=${DIRNAME}/format_cmake.sh
+alias format_cpp=${DIRNAME}/format_cpp.sh
+alias format_all=${DIRNAME}/format_all.sh
