@@ -1,11 +1,27 @@
 {
     "configurations": [
         {
+            "name": "visualize_benchmarks.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/visualize_benchmarks.py",
+            "console": "integratedTerminal",
+            "args": [
+                "-i",
+                "${workspaceFolder}/results",
+                "-o",
+                "${workspaceFolder}/results/benchmark_visualizations.html"
+            ]
+        },
+        {
             "type": "lldb",
             "request": "launch",
             "name": "benchmark_test",
             "program": "${workspaceFolder}/build/benchmarks/benchmark_test",
-            "args": ["-q", "32"],
+            "args": [
+                "-q",
+                "32"
+            ],
             "cwd": "${workspaceFolder}"
         },
         {
@@ -16,6 +32,5 @@
             "args": [],
             "cwd": "${workspaceFolder}"
         }
-
     ]
 }
