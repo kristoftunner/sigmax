@@ -6,6 +6,7 @@
 # Prerequisites:
 #   - Build the project so build/benchmarks/benchmark_test exists
 #   - tracy-capture on PATH (optional; skipped if not found)
+#   - tracy-csvexport on PATH (optional; exports each .tracy to .csv)
 #   - Python 3 with plotly (for scripts/visualize_benchmarks.py)
 #
 # Usage: run from project root, or pass project root as first argument.
@@ -75,7 +76,19 @@ for q in "${QUEUE_SIZES[@]}"; do
     if [[ -n "${TRACY_PID:-}" ]]; then
         kill -INT "$TRACY_PID" 2>/dev/null || true
         wait "$TRACY_PID" 2>/dev/null || true
-        echo "Tracy trace saved to: ${BENCHMARKS_DIR}/tracy_q${q}.tracy"
+        echo "Tracy trace saved to: ${TRACY_OUT}"
+        if command -v tracy-csvexport &>/dev/null; then
+            TRACY_CSV="${RESULTS_DIR}/tracy_q${q}.csv"
+            if tracy-csvexport "$TRACY_OUT" > "$TRACY_CSV" 2>/dev/null; then
+                echo "Tracy CSV exported to: $TRACY_CSV"
+            else
+                echo "Warning: tracy-csvexport failed for $TRACY_OUT"
+                exit 1
+            fi
+        else
+            echo "tracy-csvexport not found; skipping CSV export"
+            exit 1
+        fi
     fi
 
 
@@ -93,4 +106,5 @@ if ! python3 "$SCRIPT_DIR/visualize_benchmarks.py" -i "$RESULTS_DIR" -o "$HTML_O
 fi
 echo "Visualization saved to: $HTML_OUT"
 echo "All queue sizes finished. Visualizations are in ${RESULTS_DIR}/benchmark_visualizations.html"
-echo "Tracy traces are in ${RESULTS_DIR}/tracy_q<SIZE>.tracy"
+echo "Tracy traces: ${RESULTS_DIR}/tracy_q<SIZE>.tracy"
+echo "Tracy CSVs:   ${RESULTS_DIR}/tracy_q<SIZE>.csv"

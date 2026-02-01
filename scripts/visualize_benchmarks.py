@@ -6,6 +6,7 @@ All measurements are taken within 1 second, so successfulPops represents through
 """
 
 import argparse
+import csv
 import json
 import re
 import plotly.graph_objects as go  # type: ignore[import-not-found]
@@ -19,6 +20,8 @@ import logging
 
 # Glob pattern for per-queue-size result files produced by run_benchmarks.sh
 BENCHMARK_RESULTS_GLOB = 'benchmark_results_q*.json'
+# Tracy CSV export files (tracy-csvexport output)
+TRACY_CSV_GLOB = 'tracy_q*.csv'
 
 
 def load_benchmark_json(json_path: Path) -> dict[str, Any]:
@@ -36,6 +39,12 @@ def load_benchmark_data(json_path: Path) -> list[dict[str, Any]]:
 def _queue_size_from_filename(path: Path) -> int:
     """Extract queue size from benchmark_results_q<N>.json filename for ordering."""
     match = re.search(r'benchmark_results_q(\d+)\.json', path.name)
+    return int(match.group(1)) if match else 0
+
+
+def _queue_size_from_tracy_filename(path: Path) -> int:
+    """Extract queue size from tracy_q<N>.csv filename for ordering."""
+    match = re.search(r'tracy_q(\d+)\.csv', path.name)
     return int(match.group(1)) if match else 0
 
 
@@ -60,6 +69,42 @@ def load_all_benchmark_results(results_dir: Path) -> tuple[list[dict[str, Any]],
         logging.info("Loaded %s: %d results", p.name, len(results))
 
     return combined, cpu_info
+
+
+def load_all_tracy_csv(results_dir: Path) -> list[dict[str, Any]]:
+    """
+    Load all tracy_q<size>.csv files from results_dir.
+    Returns a flat list of rows with keys: queue_size, name, src_file, src_line,
+    total_ns, total_perc, counts, mean_ns, min_ns, max_ns, std_ns (numeric where applicable).
+    """
+    paths = sorted(results_dir.glob(TRACY_CSV_GLOB), key=_queue_size_from_tracy_filename)
+    rows: list[dict[str, Any]] = []
+    for p in paths:
+        queue_size = _queue_size_from_tracy_filename(p)
+        n = 0
+        with open(p, newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                n += 1
+                r: dict[str, Any] = {'queue_size': queue_size}
+                for key in ('name', 'src_file', 'src_line', 'total_ns', 'total_perc',
+                            'counts', 'mean_ns', 'min_ns', 'max_ns', 'std_ns'):
+                    val = row.get(key, '')
+                    if key in ('src_line', 'counts'):
+                        try:
+                            r[key] = int(val) if val else 0
+                        except ValueError:
+                            r[key] = val
+                    elif key in ('total_ns', 'total_perc', 'mean_ns', 'min_ns', 'max_ns', 'std_ns'):
+                        try:
+                            r[key] = float(val) if val else 0.0
+                        except ValueError:
+                            r[key] = val
+                    else:
+                        r[key] = val
+                rows.append(r)
+        logging.info("Loaded Tracy CSV %s: %d zones", p.name, n)
+    return rows
 
 
 def organize_data(results):
@@ -405,6 +450,74 @@ def plot_heatmap(results) -> go.Figure:
     return fig
 
 
+def plot_tracy_mean_ns(tracy_rows: list[dict[str, Any]]) -> go.Figure:
+    """Plot mean latency (mean_ns) vs queue size, one line per Tracy zone."""
+    fig = go.Figure()
+    by_name: dict[str, list[tuple[int, float]]] = defaultdict(list)
+    for r in tracy_rows:
+        name = r.get('name') or 'unknown'
+        qs = r.get('queue_size', 0)
+        by_name[name].append((qs, r.get('mean_ns', 0)))
+    for name in by_name:
+        pts = sorted(by_name[name], key=lambda x: x[0])
+        queue_sizes = [x[0] for x in pts]
+        mean_ns = [x[1] for x in pts]
+        fig.add_trace(
+            go.Scatter(
+                x=queue_sizes,
+                y=mean_ns,
+                mode="lines+markers",
+                name=name,
+                line={"width": 2},
+                marker={"size": 8},
+            )
+        )
+    fig.update_layout(
+        template="plotly_white",
+        width=1100,
+        height=600,
+        title="Tracy: Mean latency (ns) by zone vs queue size",
+        legend_title_text="Zone",
+        margin=dict(l=80, r=40, t=80, b=80),
+    )
+    fig.update_xaxes(title_text="Queue size", type="log")
+    fig.update_yaxes(title_text="Mean latency (ns)", rangemode="tozero")
+    return fig
+
+def plot_tracy_push_pop_counts(tracy_rows: list[dict[str, Any]]) -> go.Figure:
+    """Plot push and pop counts vs queue size, one line per Tracy zone."""
+    fig = go.Figure()
+    by_name: dict[str, list[tuple[int, int]]] = defaultdict(list)
+    for r in tracy_rows:
+        name = r.get('name') or 'unknown'
+        qs = r.get('queue_size', 0)
+        by_name[name].append((qs, r.get('counts', 0)))
+    for name in by_name:
+        pts = sorted(by_name[name], key=lambda x: x[0])
+        queue_sizes = [x[0] for x in pts]
+        counts = [x[1] for x in pts]
+        fig.add_trace(
+            go.Scatter(
+                x=queue_sizes,
+                y=counts,
+                mode="lines+markers",
+                name=f"{name}",
+                line={"width": 2},
+                marker={"size": 8},
+            )
+        )
+    fig.update_layout(
+        template="plotly_white",
+        width=1100,
+        height=600,
+        title="Tracy: Push and pop counts by zone vs queue size",
+        legend_title_text="Zone",
+        margin=dict(l=80, r=40, t=80, b=80),
+    )
+    fig.update_xaxes(title_text="Queue size", type="log")
+    fig.update_yaxes(title_text="Count", rangemode="tozero")
+    return fig
+
 def main():
     logging.basicConfig(level=logging.INFO)
     script_dir = Path(__file__).parent
@@ -450,14 +563,27 @@ def main():
     # Organize data
     by_queue_size, by_producer_count = organize_data(results)
 
-    # Create visualizations
-    logging.info("\nGenerating visualizations...")
-    queue_size_fig = plot_queue_size_effect(by_queue_size)
-    producer_count_fig = plot_producer_count_effect(by_producer_count)
-    heatmap_fig = plot_heatmap(results)
+    # Create benchmark visualizations
+    logging.info("\nGenerating benchmark visualizations...")
+    figures: List[go.Figure] = [
+        plot_queue_size_effect(by_queue_size),
+        plot_producer_count_effect(by_producer_count),
+        plot_heatmap(results),
+    ]
+
+    # Load Tracy CSVs from same directory (when input is a dir) and add Tracy figures
+    if input_path.is_dir():
+        tracy_paths = list(input_path.glob(TRACY_CSV_GLOB))
+        if tracy_paths:
+            logging.info("Loading Tracy CSV results from %s (%s)...", input_path, TRACY_CSV_GLOB)
+            tracy_rows = load_all_tracy_csv(input_path)
+            if tracy_rows:
+                logging.info("Generating Tracy visualizations (%d rows)...", len(tracy_rows))
+                figures.append(plot_tracy_mean_ns(tracy_rows))
+                figures.append(plot_tracy_push_pop_counts(tracy_rows))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    write_html_report([queue_size_fig, producer_count_fig, heatmap_fig], output_path, cpu_info=cpu_info)
+    write_html_report(figures, output_path, cpu_info=cpu_info)
     logging.info("\nAll visualizations saved to %s", output_path)
     return 0
 
