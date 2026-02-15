@@ -37,4 +37,4 @@ Thumbs.db
 .cache
 
 # project specific files
-benchmark_results.json
+results
