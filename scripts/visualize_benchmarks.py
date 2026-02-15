@@ -5,7 +5,10 @@ Shows the effect of queue size and producer count on throughput.
 All measurements are taken within 1 second, so successfulPops represents throughput (MOps/sec).
 """
 
+import argparse
+import csv
 import json
+import re
 import plotly.graph_objects as go  # type: ignore[import-not-found]
 import plotly.express as px  # type: ignore[import-not-found]
 import plotly.io as pio  # type: ignore[import-not-found]
@@ -14,6 +17,11 @@ from typing import Any, List
 from pathlib import Path
 from collections import defaultdict
 import logging
+
+# Glob pattern for per-queue-size result files produced by run_benchmarks.sh
+BENCHMARK_RESULTS_GLOB = 'benchmark_results_q*.json'
+# Tracy CSV export files (tracy-csvexport output)
+TRACY_CSV_GLOB = 'tracy_q*.csv'
 
 
 def load_benchmark_json(json_path: Path) -> dict[str, Any]:
@@ -28,6 +36,104 @@ def load_benchmark_data(json_path: Path) -> list[dict[str, Any]]:
     return data['benchmarkResults']
 
 
+def _benchmark_sort_key(path: Path) -> tuple[int, int]:
+    """(queue_size, producer_count) for benchmark_results_q<N>_p<P>.json or benchmark_results_q<N>.json."""
+    m = re.search(r'benchmark_results_q(\d+)(?:_p(\d+))?\.json', path.name)
+    if not m:
+        return 0, 0
+    q, p = int(m.group(1)), int(m.group(2)) if m.group(2) else 0
+    return q, p
+
+
+def _queue_size_from_filename(path: Path) -> int:
+    """Extract queue size from benchmark_results_q<N>.json or benchmark_results_q<N>_p<P>.json."""
+    match = re.search(r'benchmark_results_q(\d+)(?:_p\d+)?\.json', path.name)
+    return int(match.group(1)) if match else 0
+
+
+def _tracy_sort_key(path: Path) -> tuple[int, int]:
+    """(queue_size, producer_count) for tracy_q<N>_p<P>.csv or tracy_q<N>.csv."""
+    m = re.search(r'tracy_q(\d+)(?:_p(\d+))?\.csv', path.name)
+    if not m:
+        return 0, 0
+    q, p = int(m.group(1)), int(m.group(2)) if m.group(2) else 0
+    return q, p
+
+
+def _queue_size_from_tracy_filename(path: Path) -> int:
+    """Extract queue size from tracy_q<N>.csv or tracy_q<N>_p<P>.csv."""
+    match = re.search(r'tracy_q(\d+)(?:_p\d+)?\.csv', path.name)
+    return int(match.group(1)) if match else 0
+
+
+def _producer_count_from_tracy_filename(path: Path) -> int:
+    """Extract producer count from tracy_q<N>_p<P>.csv (0 if no _p)."""
+    match = re.search(r'tracy_q\d+_p(\d+)\.csv', path.name)
+    return int(match.group(1)) if match else 0
+
+
+def load_all_benchmark_results(results_dir: Path) -> tuple[list[dict[str, Any]], Any]:
+    """
+    Load all benchmark_results_q<size>.json files from results_dir and merge them.
+    Returns (combined_benchmark_results, cpu_info from first file).
+    """
+    paths = sorted(results_dir.glob(BENCHMARK_RESULTS_GLOB), key=_benchmark_sort_key)
+    if not paths:
+        return [], None
+
+    combined: list[dict[str, Any]] = []
+    cpu_info: Any = None
+
+    for p in paths:
+        payload = load_benchmark_json(p)
+        results = payload.get('benchmarkResults', [])
+        if isinstance(results, dict):
+            results = [results]
+        combined.extend(results)
+        if cpu_info is None and payload.get('cpuInfo') is not None:
+            cpu_info = payload['cpuInfo']
+        logging.info("Loaded %s: %d results", p.name, len(results))
+
+    return combined, cpu_info
+
+
+def load_all_tracy_csv(results_dir: Path) -> list[dict[str, Any]]:
+    """
+    Load all tracy_q<size>.csv files from results_dir.
+    Returns a flat list of rows with keys: queue_size, name, src_file, src_line,
+    total_ns, total_perc, counts, mean_ns, min_ns, max_ns, std_ns (numeric where applicable).
+    """
+    paths = sorted(results_dir.glob(TRACY_CSV_GLOB), key=_tracy_sort_key)
+    rows: list[dict[str, Any]] = []
+    for p in paths:
+        queue_size = _queue_size_from_tracy_filename(p)
+        producer_count = _producer_count_from_tracy_filename(p)
+        n = 0
+        with open(p, newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                n += 1
+                r: dict[str, Any] = {'queue_size': queue_size, 'producer_count': producer_count}
+                for key in ('name', 'src_file', 'src_line', 'total_ns', 'total_perc',
+                            'counts', 'mean_ns', 'min_ns', 'max_ns', 'std_ns'):
+                    val = row.get(key, '')
+                    if key in ('src_line', 'counts'):
+                        try:
+                            r[key] = int(val) if val else 0
+                        except ValueError:
+                            r[key] = val
+                    elif key in ('total_ns', 'total_perc', 'mean_ns', 'min_ns', 'max_ns', 'std_ns'):
+                        try:
+                            r[key] = float(val) if val else 0.0
+                        except ValueError:
+                            r[key] = val
+                    else:
+                        r[key] = val
+                rows.append(r)
+        logging.info("Loaded Tracy CSV %s: %d zones", p.name, n)
+    return rows
+
+
 def organize_data(results):
     """Organize data by queue size and producer count."""
     by_queue_size = defaultdict(list)
@@ -38,7 +144,7 @@ def organize_data(results):
         producer_count = result['producerCount']
         # All measurements are taken within 1 second, so successfulPops is ops/sec.
         # Convert to MOps/sec for nicer plots / consistency.
-        throughput = result['successfulPops'] / 1e6
+        throughput = result['successfulPops'] / 0.5e6 # 0.5 seconds is the duration of the benchmark
         
         by_queue_size[queue_size].append({
             'producerCount': producer_count,
@@ -340,7 +446,7 @@ def plot_heatmap(results) -> go.Figure:
     for result in results:
         qs_idx = qs_idx_map[result['queueSize']]
         pc_idx = pc_idx_map[result['producerCount']]
-        throughput_matrix[pc_idx][qs_idx] = result['successfulPops'] / 1e6
+        throughput_matrix[pc_idx][qs_idx] = result['successfulPops'] / 0.5e6
 
     text = [[f"{v:.4f}" for v in row] for row in throughput_matrix]
 
@@ -371,37 +477,238 @@ def plot_heatmap(results) -> go.Figure:
     return fig
 
 
+def _tracy_series_key(r: dict[str, Any]) -> tuple[str, int]:
+    """(zone name, producer_count) for grouping Tracy traces per producer."""
+    name = r.get('name') or 'unknown'
+    pc = r.get('producer_count', 0)
+    return name, pc
+
+
+def _tracy_legend_label(name: str, producer_count: int) -> str:
+    """Label for legend: zone (P producers)."""
+    if producer_count <= 0:
+        return name
+    return f"{name} ({producer_count} producer{'s' if producer_count != 1 else ''})"
+
+
+def plot_tracy_push_mean_ns(tracy_rows: list[dict[str, Any]]) -> go.Figure:
+    """Plot Push mean latency (mean_ns) vs queue size, one line per producer count (Push zone only)."""
+    push_rows = [r for r in tracy_rows if 'Push' in (r.get('name') or '')]
+    fig = go.Figure()
+    by_series: dict[tuple[str, int], list[tuple[int, float]]] = defaultdict(list)
+    for r in push_rows:
+        key = _tracy_series_key(r)
+        qs = r.get('queue_size', 0)
+        by_series[key].append((qs, r.get('mean_ns', 0)))
+    for (name, pc), pts in sorted(by_series.items(), key=lambda x: (x[0][0], x[0][1])):
+        pts = sorted(pts, key=lambda x: x[0])
+        queue_sizes = [x[0] for x in pts]
+        mean_ns = [x[1] for x in pts]
+        label = _tracy_legend_label(name, pc)
+        fig.add_trace(
+            go.Scatter(
+                x=queue_sizes,
+                y=mean_ns,
+                mode="lines+markers",
+                name=label,
+                line={"width": 2},
+                marker={"size": 8},
+            )
+        )
+    fig.update_layout(
+        template="plotly_white",
+        width=1100,
+        height=600,
+        title="Tracy: Push mean latency (ns) by producer count vs queue size",
+        legend_title_text="Producers",
+        margin=dict(l=80, r=40, t=80, b=80),
+    )
+    fig.update_xaxes(title_text="Queue size", type="log")
+    fig.update_yaxes(title_text="Mean latency (ns)", rangemode="tozero")
+    return fig
+
+
+def plot_tracy_pop_mean_ns(tracy_rows: list[dict[str, Any]]) -> go.Figure:
+    """Plot Pop mean latency (mean_ns) vs queue size, one line per producer count (Pop zone only)."""
+    pop_rows = [r for r in tracy_rows if 'Pop' in (r.get('name') or '')]
+    fig = go.Figure()
+    by_series: dict[tuple[str, int], list[tuple[int, float]]] = defaultdict(list)
+    for r in pop_rows:
+        key = _tracy_series_key(r)
+        qs = r.get('queue_size', 0)
+        by_series[key].append((qs, r.get('mean_ns', 0)))
+    for (name, pc), pts in sorted(by_series.items(), key=lambda x: (x[0][0], x[0][1])):
+        pts = sorted(pts, key=lambda x: x[0])
+        queue_sizes = [x[0] for x in pts]
+        mean_ns = [x[1] for x in pts]
+        label = _tracy_legend_label(name, pc)
+        fig.add_trace(
+            go.Scatter(
+                x=queue_sizes,
+                y=mean_ns,
+                mode="lines+markers",
+                name=label,
+                line={"width": 2},
+                marker={"size": 8},
+            )
+        )
+    fig.update_layout(
+        template="plotly_white",
+        width=1100,
+        height=600,
+        title="Tracy: Pop mean latency (ns) by producer count vs queue size",
+        legend_title_text="Producers",
+        margin=dict(l=80, r=40, t=80, b=80),
+    )
+    fig.update_xaxes(title_text="Queue size", type="log")
+    fig.update_yaxes(title_text="Mean latency (ns)", rangemode="tozero")
+    return fig
+
+
+def plot_tracy_push_counts(tracy_rows: list[dict[str, Any]]) -> go.Figure:
+    """Plot Push counts vs queue size, one line per producer count (Push zone only)."""
+    push_rows = [r for r in tracy_rows if 'Push' in (r.get('name') or '')]
+    fig = go.Figure()
+    by_series: dict[tuple[str, int], list[tuple[int, float]]] = defaultdict(list)
+    for r in push_rows:
+        key = _tracy_series_key(r)
+        qs = r.get('queue_size', 0)
+        by_series[key].append((qs, r.get('counts', 0)))
+    for (name, pc), pts in sorted(by_series.items(), key=lambda x: (x[0][0], x[0][1])):
+        pts = sorted(pts, key=lambda x: x[0])
+        queue_sizes = [x[0] for x in pts]
+        counts = [x[1] for x in pts]
+        label = _tracy_legend_label(name, pc)
+        fig.add_trace(
+            go.Scatter(
+                x=queue_sizes,
+                y=counts,
+                mode="lines+markers",
+                name=label,
+                line={"width": 2},
+                marker={"size": 8},
+            )
+        )
+    fig.update_layout(
+        template="plotly_white",
+        width=1100,
+        height=600,
+        title="Tracy: Push counts by producer count vs queue size",
+        legend_title_text="Producers",
+        margin=dict(l=80, r=40, t=80, b=80),
+    )
+    fig.update_xaxes(title_text="Queue size", type="log")
+    fig.update_yaxes(title_text="Count", rangemode="tozero")
+    return fig
+
+
+def plot_tracy_pop_counts(tracy_rows: list[dict[str, Any]]) -> go.Figure:
+    """Plot Pop counts vs queue size, one line per producer count (Pop zone only)."""
+    pop_rows = [r for r in tracy_rows if 'Pop' in (r.get('name') or '')]
+    fig = go.Figure()
+    by_series: dict[tuple[str, int], list[tuple[int, float]]] = defaultdict(list)
+    for r in pop_rows:
+        key = _tracy_series_key(r)
+        qs = r.get('queue_size', 0)
+        by_series[key].append((qs, r.get('counts', 0)))
+    for (name, pc), pts in sorted(by_series.items(), key=lambda x: (x[0][0], x[0][1])):
+        pts = sorted(pts, key=lambda x: x[0])
+        queue_sizes = [x[0] for x in pts]
+        counts = [x[1] for x in pts]
+        label = _tracy_legend_label(name, pc)
+        fig.add_trace(
+            go.Scatter(
+                x=queue_sizes,
+                y=counts,
+                mode="lines+markers",
+                name=label,
+                line={"width": 2},
+                marker={"size": 8},
+            )
+        )
+    fig.update_layout(
+        template="plotly_white",
+        width=1100,
+        height=600,
+        title="Tracy: Pop counts by producer count vs queue size",
+        legend_title_text="Producers",
+        margin=dict(l=80, r=40, t=80, b=80),
+    )
+    fig.update_xaxes(title_text="Queue size", type="log")
+    fig.update_yaxes(title_text="Count", rangemode="tozero")
+    return fig
+
 def main():
     logging.basicConfig(level=logging.INFO)
-    # Get script directory and project root
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
-    json_path = project_root / 'results' / 'benchmark_results.json'
-    output_dir = project_root / 'results'
-    
-    if not json_path.exists():
-        logging.error(f"Error: {json_path} not found!")
-        return
-    
-    logging.info(f"Loading benchmark data from {json_path}...")
-    payload = load_benchmark_json(json_path)
-    results = payload["benchmarkResults"]
-    cpu_info = payload.get("cpuInfo")
-    logging.info(f"Loaded {len(results)} benchmark results")
-    
+    default_results_dir = project_root / 'results'
+    default_output = project_root / 'results' / 'benchmark_visualizations.html'
+
+    parser = argparse.ArgumentParser(
+        description='Visualize MPSC queue benchmark results. '
+        'By default loads all benchmark_results_q<size>.json from the results directory.'
+    )
+    parser.add_argument(
+        '-i', '--input',
+        type=Path,
+        default=None,
+        help='Input: either a directory (load all benchmark_results_q*.json) or a single JSON file'
+    )
+    parser.add_argument('-o', '--output', type=Path, default=default_output,
+                        help=f'Output HTML path (default: {default_output})')
+    args = parser.parse_args()
+
+    input_path = args.input if args.input is not None else default_results_dir
+    output_path = args.output
+
+    if not input_path.exists():
+        logging.error("Error: %s not found!", input_path)
+        return 1
+
+    if input_path.is_dir():
+        logging.info("Loading all benchmark results from %s (%s)...", input_path, BENCHMARK_RESULTS_GLOB)
+        results, cpu_info = load_all_benchmark_results(input_path)
+        if not results:
+            logging.error("Error: no %s files found in %s", BENCHMARK_RESULTS_GLOB, input_path)
+            return 1
+        logging.info("Total: %d benchmark results from all queue sizes", len(results))
+    else:
+        logging.info("Loading benchmark data from %s...", input_path)
+        payload = load_benchmark_json(input_path)
+        results = payload["benchmarkResults"]
+        cpu_info = payload.get("cpuInfo")
+        logging.info("Loaded %d benchmark results", len(results))
+
     # Organize data
     by_queue_size, by_producer_count = organize_data(results)
-    
-    # Create visualizations
-    logging.info("\nGenerating visualizations...")
-    queue_size_fig = plot_queue_size_effect(by_queue_size)
-    producer_count_fig = plot_producer_count_effect(by_producer_count)
-    heatmap_fig = plot_heatmap(results)
 
-    output_path = output_dir / "benchmark_visualizations.html"
-    write_html_report([queue_size_fig, producer_count_fig, heatmap_fig], output_path, cpu_info=cpu_info)
-    logging.info("\nAll visualizations saved to scripts/ directory!")
+    # Create benchmark visualizations
+    logging.info("\nGenerating benchmark visualizations...")
+    figures: List[go.Figure] = [
+        plot_queue_size_effect(by_queue_size),
+        plot_producer_count_effect(by_producer_count),
+        plot_heatmap(results),
+    ]
+
+    # Load Tracy CSVs from same directory (when input is a dir) and add Tracy figures
+    if input_path.is_dir():
+        tracy_paths = list(input_path.glob(TRACY_CSV_GLOB))
+        if tracy_paths:
+            logging.info("Loading Tracy CSV results from %s (%s)...", input_path, TRACY_CSV_GLOB)
+            tracy_rows = load_all_tracy_csv(input_path)
+            if tracy_rows:
+                logging.info("Generating Tracy visualizations (%d rows)...", len(tracy_rows))
+                figures.append(plot_tracy_push_mean_ns(tracy_rows))
+                figures.append(plot_tracy_pop_mean_ns(tracy_rows))
+                figures.append(plot_tracy_push_counts(tracy_rows))
+                figures.append(plot_tracy_pop_counts(tracy_rows))
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    write_html_report(figures, output_path, cpu_info=cpu_info)
+    logging.info("\nAll visualizations saved to %s", output_path)
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

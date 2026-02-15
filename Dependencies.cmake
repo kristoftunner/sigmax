@@ -83,4 +83,15 @@ function(sigmax_setup_dependencies)
             "CPUINFO_BUILD_BENCHMARKS OFF")
     endif()
 
+    if(NOT TARGET argparse::argparse)
+        cpmaddpackage(
+            NAME
+            argparse
+            GITHUB_REPOSITORY
+            "p-ranav/argparse"
+            VERSION
+            3.2
+        )
+    endif()
+
 endfunction()

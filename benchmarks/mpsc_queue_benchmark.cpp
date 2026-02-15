@@ -5,8 +5,11 @@
 #include <future>
 #include <thread>
 
+#include <argparse/argparse.hpp>
+
 #include "mpsc_queue.hpp"
 #include "order_type.hpp"
+
 
 namespace sigmax {
 MpscQueueBenchmark::MpscQueueBenchmark(const std::filesystem::path &benchmarkResultsPath) : m_benchmarkResultsPath(benchmarkResultsPath)
@@ -15,7 +18,7 @@ MpscQueueBenchmark::MpscQueueBenchmark(const std::filesystem::path &benchmarkRes
     m_cpuInfo.QueryCpuInfo();
 }
 
-template<typename QueueSize> bool MpscQueueBenchmark::RunBenchmark(const std::vector<int> &producerCount)
+template<typename QueueSize> bool MpscQueueBenchmark::RunBenchmark(int producerCount)
 {
     using QueueType = MpscQueue<Order, QueueSize::value>;
     // constantly writing and reading from the queue
@@ -36,55 +39,48 @@ template<typename QueueSize> bool MpscQueueBenchmark::RunBenchmark(const std::ve
         return { counter, successfullPops };
     };
 
-    std::vector<nlohmann::json> benchmarkResults;
-    for (const auto &count : producerCount) {
-        nlohmann::json singleBenchmarkResult;
-        singleBenchmarkResult["producerCount"] = count;
-        singleBenchmarkResult["queueSize"] = QueueSize::value * sizeof(typename QueueType::value_type);
-        QueueType queue;
-        std::promise<void> go;
-        std::shared_future<void> ready(go.get_future().share());
-        std::vector<std::future<void>> writerFutures;
-        bool stop = false;
-        for (int i{ 0 }; i < count; i++) {
-            writerFutures.emplace_back(std::async(std::launch::async, writer, std::ref(queue), std::ref(ready), std::ref(stop)));
-        }
-        auto readerFut = std::async(std::launch::async, reader, std::ref(queue), std::ref(ready), std::ref(stop));
-        go.set_value();
-
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        stop = true;
-        auto [popCount, successfulPops] = readerFut.get();
-        singleBenchmarkResult["totalPops"] = popCount;
-        singleBenchmarkResult["successfulPops"] = successfulPops;
-        benchmarkResults.push_back(singleBenchmarkResult);
-        LOG_INFO("Benchmark config: producers: {}, queue size: {}", count, QueueSize::value);
-        LOG_INFO("Total pops: {}, successful pops: {}", popCount, successfulPops);
+    nlohmann::json singleBenchmarkResult;
+    singleBenchmarkResult["producerCount"] = producerCount;
+    singleBenchmarkResult["queueSize"] = QueueSize::value * sizeof(typename QueueType::value_type);
+    QueueType queue;
+    std::promise<void> go;
+    std::shared_future<void> ready(go.get_future().share());
+    std::vector<std::future<void>> writerFutures;
+    bool stop = false;
+    for (int i{ 0 }; i < producerCount; i++) {
+        writerFutures.emplace_back(std::async(std::launch::async, writer, std::ref(queue), std::ref(ready), std::ref(stop)));
     }
+    auto readerFut = std::async(std::launch::async, reader, std::ref(queue), std::ref(ready), std::ref(stop));
+    go.set_value();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    stop = true;
+    auto [popCount, successfulPops] = readerFut.get();
+    singleBenchmarkResult["totalPops"] = popCount;
+    singleBenchmarkResult["successfulPops"] = successfulPops;
+    LOG_INFO("Benchmark config: producers: {}, queue size: {}", producerCount, QueueSize::value);
+    LOG_INFO("Total pops: {}, successful pops: {}", popCount, successfulPops);
 
 
-    if(!SaveBenchmarkResults(benchmarkResults)) {
+    if (!SaveBenchmarkResults(singleBenchmarkResult)) {
         LOG_ERROR("Failed to save benchmark results");
         return false;
     }
     return true;
 }
 
-bool MpscQueueBenchmark::SaveBenchmarkResults(const std::vector<nlohmann::json> &benchmarkResults) const
+bool MpscQueueBenchmark::SaveBenchmarkResults(const nlohmann::json &benchmarkResult) const
 {
     nlohmann::json finalBenchmarkResults;
-    finalBenchmarkResults["benchmarkResults"] = benchmarkResults;
-    if(std::filesystem::exists(m_benchmarkResultsPath)) {
+    finalBenchmarkResults["benchmarkResults"] = benchmarkResult;
+    if (std::filesystem::exists(m_benchmarkResultsPath)) {
         std::ifstream in(m_benchmarkResultsPath);
         nlohmann::json existingBenchmarkResults;
         in >> existingBenchmarkResults;
-        for(const auto &result : existingBenchmarkResults["benchmarkResults"]) {
-            finalBenchmarkResults["benchmarkResults"].push_back(result);
-        }
     }
     finalBenchmarkResults["cpuInfo"] = m_cpuInfo.ToJson();
     std::ofstream out(m_benchmarkResultsPath);
-    if(!out) {
+    if (!out) {
         LOG_ERROR("Failed to open file for saving benchmark results");
         return false;
     }
@@ -97,20 +93,74 @@ bool MpscQueueBenchmark::SaveBenchmarkResults(const std::vector<nlohmann::json> 
 
 }// namespace sigmax
 
-int main()
+using namespace sigmax;
+
+int main(int argc, char *argv[])
 {
-    using namespace sigmax;
-    std::vector<int> producerCount = { 1, 2, 4, 8, 16, 32, 64 };
-    MpscQueueBenchmark benchmark(std::filesystem::path("results/benchmark_results.json"));
-    auto result = benchmark.RunBenchmark<std::integral_constant<int, 64>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 128>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 256>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 512>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024 * 2>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024 * 4>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024 * 8>>(producerCount);
-    result |= benchmark.RunBenchmark<std::integral_constant<int, 1024 * 10>>(producerCount);
+    argparse::ArgumentParser program("benchmark_test");
+    program.add_argument("-q", "--queue-size")
+        .help("Queue size, possible values: 32, 64, 128, 256, 512, 1024, 1024*2, 1024*4, 1024*8, 1024*10")
+        .default_value(32)
+        .scan<'i', int>();
+    program.add_argument("-p", "--producer-count")
+        .help("Producer count, possible values: 1, 2, 4, 8, 16, 32, 64")
+        .default_value(1)
+        .scan<'i', int>()
+        .required();
+    program.add_argument("-r", "--results-path")
+        .help("Path to write benchmark results JSON")
+        .default_value(std::string("results/benchmark_results_q${queueSize}_p${producerCount}.json"))
+        .required();
+    program.add_epilog("Example: benchmark_test -q 32 -p 1 -r results/benchmark_results_q${queueSize}_p${producerCount}.json");
+    program.add_description("Benchmark the MPSC queue");
+    try {
+        program.parse_args(argc, argv);
+    } catch (const std::exception &e) {
+        LOG_ERROR("Error: {}", e.what());
+        return 1;
+    }
+
+    std::filesystem::path resultsPath = program.get<std::string>("--results-path");
+    MpscQueueBenchmark benchmark(resultsPath);
+    int queueSize = program.get<int>("--queue-size");
+    int producerCountValue = program.get<int>("--producer-count");
+    bool result = false;
+    switch (queueSize) {
+    case 32:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 32>>(producerCountValue);
+        break;
+    case 64:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 64>>(producerCountValue);
+        break;
+    case 128:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 128>>(producerCountValue);
+        break;
+    case 256:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 256>>(producerCountValue);
+        break;
+    case 512:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 512>>(producerCountValue);
+        break;
+    case 1024:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 1024>>(producerCountValue);
+        break;
+    case 1024 * 2:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 1024 * 2>>(producerCountValue);
+        break;
+    case 1024 * 4:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 1024 * 4>>(producerCountValue);
+        break;
+    case 1024 * 8:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 1024 * 8>>(producerCountValue);
+        break;
+    case 1024 * 10:
+        result = benchmark.RunBenchmark<std::integral_constant<int, 1024 * 10>>(producerCountValue);
+        break;
+    default:
+        LOG_ERROR("Invalid queue size");
+        return 1;
+    }
+
     if (!result) {
         LOG_ERROR("Benchmark failed");
         return 1;
