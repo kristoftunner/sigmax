@@ -25,7 +25,7 @@ public:
     using value_type = T;
     MpscQueue() : m_buffer_mask(C)
     {
-        for (std::size_t i{ 0 }; i < C; i++) { m_data[i].sequence.store(i); }
+        for (std::size_t i{ 0 }; i < C; i++) { m_data[i].sequence.store(i, std::memory_order_relaxed); }
         LOG_INFO("head is lock free: {}", m_head.is_lock_free());
     }
 
@@ -33,22 +33,22 @@ public:
     QueueState PushBack(const T &element)
     {
         ZoneScopedN("MpscQueue::Push");
-        auto pos = m_head.load();
+        auto pos = m_head.load(std::memory_order_acquire);
         while (true) {
-            const auto seq = m_data.at(pos % m_buffer_mask).sequence.load();
+            const auto seq = m_data.at(pos % m_buffer_mask).sequence.load(std::memory_order_acquire);
             const std::int64_t diff = static_cast<std::int64_t>(seq) - static_cast<std::int64_t>(pos);
             if (diff == 0L) {
-                if (m_head.compare_exchange_strong(pos, pos + 1)) { break; }
+                if (m_head.compare_exchange_weak(pos, pos + 1, std::memory_order_acq_rel, std::memory_order_relaxed)) { break; }
             } else if (diff < 0L) {
                 LOG_DEBUG("queue is full");
                 return QueueState::QUEUE_IS_FULL;
             } else {
-                pos = m_head.load();
+                pos = m_head.load(std::memory_order_acquire);
             }
         }
 
         m_data.at(pos % m_buffer_mask).data = element;
-        m_data.at(pos % m_buffer_mask).sequence.store(pos + 1);
+        m_data.at(pos % m_buffer_mask).sequence.store(pos + 1, std::memory_order_release);
         m_pushCount.fetch_add(1, std::memory_order_relaxed);
         return QueueState::SUCCESS;
     }
@@ -58,30 +58,30 @@ public:
     std::expected<T, QueueState> Pop()
     {
         ZoneScopedN("MpscQueue::Pop");
-        auto pos = m_tail.load();
+        auto pos = m_tail.load(std::memory_order_acquire);
         while (true) {
-            const auto seq = m_data[pos % m_buffer_mask].sequence.load();
+            const auto seq = m_data[pos % m_buffer_mask].sequence.load(std::memory_order_acquire);
             const std::int64_t diff = static_cast<std::int64_t>(seq) - static_cast<std::int64_t>(pos + 1);
             if (diff == 0L) {
-                if (m_tail.compare_exchange_strong(pos, pos + 1)) { break; }
+                if (m_tail.compare_exchange_weak(pos, pos + 1, std::memory_order_acq_rel, std::memory_order_relaxed)) { break; }
             } else if (diff < 0L) {
                 return std::unexpected(QueueState::QUEUE_IS_EMPTY);
             } else {
-                pos = m_tail.load();
+                pos = m_tail.load(std::memory_order_acquire);
             }
         }
         const auto data = m_data[pos % m_buffer_mask].data;
         m_data[pos % m_buffer_mask].sequence.store(
-            pos + m_buffer_mask);// TODO: this might be a bug, the sequence should be incremented by the number of elements pushed
+            pos + m_buffer_mask, std::memory_order_release);// TODO: this might be a bug, the sequence should be incremented by the number of elements pushed
         m_popCount.fetch_add(1, std::memory_order_relaxed);
         return data;
     }
 
     /// \brief Get the number of elements pushed to the queue, this is best-effort, not guaranteed to be accurate
-    std::size_t GetPushCount() const { return m_pushCount.load(); }
+    std::size_t GetPushCount() const { return m_pushCount.load(std::memory_order_relaxed); }
 
     /// \brief Get the number of elements popped from the queue, this is best-effort, not guaranteed to be accurate
-    std::size_t GetPopCount() const { return m_popCount.load(); }
+    std::size_t GetPopCount() const { return m_popCount.load(std::memory_order_relaxed); }
 
     struct Cell
     {
