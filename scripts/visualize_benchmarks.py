@@ -22,6 +22,14 @@ import logging
 BENCHMARK_RESULTS_GLOB = 'benchmark_results_q*.json'
 # Tracy CSV export files (tracy-csvexport output)
 TRACY_CSV_GLOB = 'tracy_q*.csv'
+# Perf stat output files (perf_q<queue_size>_p<producer_count>.txt)
+PERF_TXT_GLOB = 'perf_q*.txt'
+
+# Perf metric names (we match event names containing these substrings)
+PERF_METRICS = {
+    'dTLB-load-misses': 'dTLB-load-misses',
+    'iTLB-load-misses': 'iTLB-load-misses',
+}
 
 
 def load_benchmark_json(json_path: Path) -> dict[str, Any]:
@@ -131,6 +139,82 @@ def load_all_tracy_csv(results_dir: Path) -> list[dict[str, Any]]:
                         r[key] = val
                 rows.append(r)
         logging.info("Loaded Tracy CSV %s: %d zones", p.name, n)
+    return rows
+
+
+def _perf_sort_key(path: Path) -> tuple[int, int]:
+    """(queue_size, producer_count) for perf_q<N>_p<P>.txt."""
+    m = re.search(r'perf_q(\d+)_p(\d+)\.txt', path.name)
+    if not m:
+        return 0, 0
+    return int(m.group(1)), int(m.group(2))
+
+
+def _parse_perf_counter_line(line: str) -> tuple[str, int] | None:
+    """
+    Parse a perf stat counter line like '        58180      dTLB-load-misses:u'.
+    Returns (event_name, value) or None if not parseable (e.g. '<not supported>').
+    """
+    # Match: optional whitespace, number, whitespace, event name (no <not supported>)
+    m = re.match(r'^\s*(\d+)\s+(\S+)\s*$', line.strip())
+    if not m:
+        return None
+    val_str, event = m.group(1), m.group(2)
+    return event.strip(), int(val_str)
+
+
+def _event_matches_metric(event_name: str, metric_key: str) -> bool:
+    """Check if perf event name matches our metric (handles suffixes like :u)."""
+    base_event = event_name.split(':')[0] if ':' in event_name else event_name
+    expected = PERF_METRICS.get(metric_key, metric_key)
+    return base_event == expected
+
+
+def load_all_perf_results(results_dir: Path) -> list[dict[str, Any]]:
+    """
+    Load all perf_q<N>_p<P>.txt files from results_dir.
+    Queue size and producer count are read from the corresponding benchmark_results_q<N>_p<P>.json.
+    Returns list of dicts with queue_size, producer_count, and metric values.
+    """
+    paths = sorted(results_dir.glob(PERF_TXT_GLOB), key=_perf_sort_key)
+    rows: list[dict[str, Any]] = []
+    for p in paths:
+        m = re.search(r'perf_q(\d+)_p(\d+)\.txt', p.name)
+        if not m:
+            continue
+        q_param, p_param = m.group(1), m.group(2)
+        json_path = results_dir / f'benchmark_results_q{q_param}_p{p_param}.json'
+        queue_size = int(q_param)
+        producer_count = int(p_param)
+        if json_path.exists():
+            try:
+                payload = load_benchmark_json(json_path)
+                br = payload.get('benchmarkResults')
+                if isinstance(br, dict):
+                    queue_size = br.get('queueSize', queue_size)
+                    producer_count = br.get('producerCount', producer_count)
+                elif isinstance(br, list) and br:
+                    queue_size = br[0].get('queueSize', queue_size)
+                    producer_count = br[0].get('producerCount', producer_count)
+            except (json.JSONDecodeError, KeyError) as e:
+                logging.warning("Could not read queue size from %s: %s", json_path.name, e)
+        metrics: dict[str, int] = {k: 0 for k in PERF_METRICS}
+        with open(p, 'r', encoding='utf-8') as f:
+            for line in f:
+                parsed = _parse_perf_counter_line(line)
+                if not parsed:
+                    continue
+                event_name, value = parsed
+                for key in PERF_METRICS:
+                    if _event_matches_metric(event_name, key):
+                        metrics[key] = value
+                        break
+        rows.append({
+            'queue_size': queue_size,
+            'producer_count': producer_count,
+            **metrics,
+        })
+    logging.info("Loaded %d perf result files", len(rows))
     return rows
 
 
@@ -638,6 +722,105 @@ def plot_tracy_pop_counts(tracy_rows: list[dict[str, Any]]) -> go.Figure:
     fig.update_yaxes(title_text="Count", rangemode="tozero")
     return fig
 
+
+def _plot_perf_metric_multiline(perf_rows: list[dict[str, Any]], metric_key: str, title: str) -> go.Figure:
+    """Create a multiline plot for a single perf metric (queue_size x-axis, one line per producer count)."""
+    if not perf_rows:
+        fig = go.Figure()
+        fig.add_annotation(text="No perf data available", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+        fig.update_layout(template="plotly_white", width=1100, height=600, title=title)
+        return fig
+
+    # Organize by producer count: {producer_count: [(queue_size, value), ...]}
+    by_producer: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    for r in perf_rows:
+        val = r.get(metric_key, 0)
+        by_producer[r['producer_count']].append((r['queue_size'], val))
+
+    has_data = any(v > 0 for pts in by_producer.values() for _, v in pts)
+    if not has_data and metric_key in ('l2_dtlb_misses', 'l2_itlb_misses'):
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"No {metric_key} data (counter may not be supported on this CPU)",
+            xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False
+        )
+        fig.update_layout(template="plotly_white", width=1100, height=600, title=title)
+        return fig
+
+    producer_counts = sorted(by_producer.keys())
+    queue_sizes = sorted(set(r['queue_size'] for r in perf_rows))
+    tick_vals = [_queue_size_kb(qs) for qs in queue_sizes]
+    tick_text = [_queue_size_kb_label(qs) for qs in queue_sizes]
+    colors = px.colors.sequential.Viridis
+
+    fig = go.Figure()
+    for i, producer_count in enumerate(producer_counts):
+        pts = sorted(by_producer[producer_count], key=lambda x: x[0])
+        queue_sizes_pts = [_queue_size_kb(qs) for qs, _ in pts]
+        values = [v for _, v in pts]
+        fig.add_trace(
+            go.Scatter(
+                x=queue_sizes_pts,
+                y=values,
+                mode="lines+markers",
+                name=f"{producer_count} producer(s)",
+                line={"width": 2, "color": colors[i % len(colors)]},
+                marker={"size": 9, "symbol": "circle"},
+            )
+        )
+
+    fig.update_layout(
+        template="plotly_white",
+        width=1100,
+        height=600,
+        title=title,
+        legend_title_text="Producer Count",
+        margin=dict(l=80, r=40, t=90, b=120),
+    )
+    fig.update_xaxes(
+        title_text="Queue Size (kB)",
+        type="log",
+        tickmode="array",
+        tickvals=tick_vals,
+        ticktext=tick_text,
+        tickangle=-45,
+    )
+    fig.update_yaxes(title_text=title.split("<br>")[0], rangemode="tozero")
+    return fig
+
+
+def plot_perf_dtlb_load_misses(perf_rows: list[dict[str, Any]]) -> go.Figure:
+    """Plot dTLB-load-misses vs queue size, one line per producer count."""
+    return _plot_perf_metric_multiline(
+        perf_rows, 'dTLB-load-misses',
+        "Perf: dTLB-load-misses<br>(Data TLB load misses)",
+    )
+
+
+def plot_perf_itlb_load_misses(perf_rows: list[dict[str, Any]]) -> go.Figure:
+    """Plot iTLB-load-misses vs queue size, one line per producer count."""
+    return _plot_perf_metric_multiline(
+        perf_rows, 'iTLB-load-misses',
+        "Perf: iTLB-load-misses<br>(Instruction TLB load misses)",
+    )
+
+
+def plot_perf_l2_dtlb_misses(perf_rows: list[dict[str, Any]]) -> go.Figure:
+    """Plot L2 DTLB misses vs queue size, one line per producer count."""
+    return _plot_perf_metric_multiline(
+        perf_rows, 'l2_dtlb_misses',
+        "Perf: L2 DTLB misses<br>(L2 data TLB misses)",
+    )
+
+
+def plot_perf_l2_itlb_misses(perf_rows: list[dict[str, Any]]) -> go.Figure:
+    """Plot L2 iTLB misses vs queue size, one line per producer count."""
+    return _plot_perf_metric_multiline(
+        perf_rows, 'l2_itlb_misses',
+        "Perf: L2 iTLB misses<br>(L2 instruction TLB misses)",
+    )
+
+
 def main():
     logging.basicConfig(level=logging.INFO)
     script_dir = Path(__file__).parent
@@ -703,6 +886,16 @@ def main():
                 figures.append(plot_tracy_pop_mean_ns(tracy_rows))
                 figures.append(plot_tracy_push_counts(tracy_rows))
                 figures.append(plot_tracy_pop_counts(tracy_rows))
+
+        # Load perf stat results and add TLB miss visualizations
+        perf_paths = list(input_path.glob(PERF_TXT_GLOB))
+        if perf_paths:
+            logging.info("Loading perf results from %s (%s)...", input_path, PERF_TXT_GLOB)
+            perf_rows = load_all_perf_results(input_path)
+            if perf_rows:
+                logging.info("Generating perf TLB visualizations (%d rows)...", len(perf_rows))
+                figures.append(plot_perf_dtlb_load_misses(perf_rows))
+                figures.append(plot_perf_itlb_load_misses(perf_rows))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write_html_report(figures, output_path, cpu_info=cpu_info)
