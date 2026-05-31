@@ -35,10 +35,6 @@ function(sigmax_setup_dependencies)
             "gtest_force_shared_crt ON")
     endif()
 
-    if(NOT TARGET tools::tools)
-        cpmaddpackage("gh:lefticus/tools#update_build_system")
-    endif()
-
     # nlohmann/json - header-only JSON library
     if(NOT TARGET nlohmann_json::nlohmann_json)
         cpmaddpackage(
