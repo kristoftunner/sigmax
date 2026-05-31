@@ -13,6 +13,6 @@ if [[ ${?} -ne 0 ]]; then
   exit 1
 fi
 
-sudo apt install build-essential
+sudo apt install build-essential clang-format clangd
 
 command -v perf >/dev/null 2>&1 && echo "" || echo "Please install perf according to the linux system you are using"

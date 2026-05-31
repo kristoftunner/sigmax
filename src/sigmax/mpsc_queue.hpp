@@ -71,8 +71,8 @@ public:
             }
         }
         const auto data = m_data[pos % m_buffer_mask].data;
-        m_data[pos % m_buffer_mask].sequence.store(
-            pos + m_buffer_mask, std::memory_order_release);// TODO: this might be a bug, the sequence should be incremented by the number of elements pushed
+        m_data[pos % m_buffer_mask].sequence.store(pos + m_buffer_mask,
+            std::memory_order_release);// TODO: this might be a bug, the sequence should be incremented by the number of elements pushed
         m_popCount.fetch_add(1, std::memory_order_relaxed);
         return data;
     }
