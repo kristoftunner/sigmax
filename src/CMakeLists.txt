@@ -18,3 +18,6 @@ set_target_properties(
                VISIBILITY_INLINES_HIDDEN YES)
 
 add_subdirectory(sigmax)
+
+add_executable(sigmax_app sigmax/sigmax_app.cpp)
+target_link_libraries(sigmax_app PRIVATE sigmax)
