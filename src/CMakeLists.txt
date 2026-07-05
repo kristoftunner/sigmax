@@ -1,9 +1,17 @@
+find_package(Boost REQUIRED CONFIG COMPONENTS system)
+
 add_library(sigmax STATIC)
 add_library(sigmax::sigmax ALIAS sigmax)
-target_link_libraries(sigmax PUBLIC sigmax_options sigmax_warnings spdlog::spdlog fmt::fmt nlohmann_json::nlohmann_json)
+target_link_libraries(
+    sigmax
+    PUBLIC sigmax_options
+           sigmax_warnings
+           spdlog::spdlog
+           fmt::fmt
+           nlohmann_json::nlohmann_json)
 
 # Optionally link Tracy profiler
-target_link_libraries(sigmax PUBLIC Tracy::TracyClient)
+target_link_libraries(sigmax PUBLIC Tracy::TracyClient Boost::headers Boost::system)
 target_compile_definitions(sigmax PUBLIC $<$<CONFIG:Debug>:TRACY_ENABLE>)
 
 target_include_directories(sigmax ${WARNING_GUARD} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/sigmax>)
@@ -16,3 +24,6 @@ set_target_properties(
                VISIBILITY_INLINES_HIDDEN YES)
 
 add_subdirectory(sigmax)
+
+add_executable(sigmax_app sigmax/sigmax_app.cpp)
+target_link_libraries(sigmax_app PRIVATE sigmax)

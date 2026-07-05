@@ -1,5 +1,11 @@
 # gathering source files
-target_sources(sigmax PRIVATE database.cpp mpsc_queue.cpp log.cpp)
+target_sources(
+    sigmax
+    PRIVATE database.cpp
+            mpsc_queue.cpp
+            log.cpp
+            binance_api.cpp
+            error_codes.cpp)
 
 # gathering headers
 target_sources(
@@ -8,4 +14,5 @@ target_sources(
            database.hpp
            instruments.hpp
            mpsc_queue.hpp
-           log.hpp)
+           log.hpp
+           binance_api.hpp)
