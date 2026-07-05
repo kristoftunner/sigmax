@@ -2,7 +2,13 @@ find_package(Boost REQUIRED CONFIG COMPONENTS system)
 
 add_library(sigmax STATIC)
 add_library(sigmax::sigmax ALIAS sigmax)
-target_link_libraries(sigmax PUBLIC sigmax_options sigmax_warnings spdlog::spdlog fmt::fmt nlohmann_json::nlohmann_json)
+target_link_libraries(
+    sigmax
+    PUBLIC sigmax_options
+           sigmax_warnings
+           spdlog::spdlog
+           fmt::fmt
+           nlohmann_json::nlohmann_json)
 
 # Optionally link Tracy profiler
 target_link_libraries(sigmax PUBLIC Tracy::TracyClient Boost::headers Boost::system)

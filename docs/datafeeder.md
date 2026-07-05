@@ -11,3 +11,14 @@
 - Recoverable errors:
   - closing the socket - some APIs after some time tend to close connection -> recovery: reconnect
 
+# Networking - websocket
+
+`net::`
+`net::ip::tcp::socket` - needed for tcp
+context - `net::ssl::context` - needed for ???
+
+## Multi-threading
+Use `net::strand`
+
+## How websocket works
+HTTPS 1.1 Upgrade request -> handshake

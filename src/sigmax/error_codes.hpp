@@ -14,4 +14,4 @@ enum class SigmaxReturnCodes {
 
 std::string to_string(SigmaxReturnCodes code);
 
-}  // namespace sigmax
+}// namespace sigmax

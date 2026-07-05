@@ -89,9 +89,7 @@ include(cmake/PackageProject.cmake)
 
 # Add other targets that you want installed here, by default we just package the one executable
 # we know we want to ship
-sigmax_package_project(
-    TARGETS sigmax_options sigmax_warnings
-)
+sigmax_package_project(TARGETS sigmax_options sigmax_warnings)
 
 # Experience shows that explicit package naming can help make it easier to sort
 # out potential ABI related issues before they start, while helping you

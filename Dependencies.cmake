@@ -86,8 +86,7 @@ function(sigmax_setup_dependencies)
             GITHUB_REPOSITORY
             "p-ranav/argparse"
             VERSION
-            3.2
-        )
+            3.2)
     endif()
 
 endfunction()
