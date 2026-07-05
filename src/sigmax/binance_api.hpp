@@ -17,25 +17,33 @@ namespace beast = boost::beast;
 using tcp = boost::asio::ip::tcp;// from <boost/asio/ip/tcp.hpp>
 
 namespace sigmax {
-/// TODO: create proper ApiReturn values
-enum class ApiReturn {
-    SUCCESS = 0,
-    INTERNAL_FAILURE = 1,
-};
-
 class BinanceApi
 {
 public:
+    /// TODO: create proper ApiReturn values
+    enum class ApiReturn {
+        SUCCESS = 0,
+        CONNECTION_ERROR = 1,
+        SUBSCRIPTION_ERROR = 2,
+    };
+public:
+    BinanceApi(const std::vector<std::string> instruments);
+
     ApiReturn Connect();
     std::expected<beast::flat_buffer, ApiReturn> Read();
     ApiReturn Close();
 
 private:
-    static constexpr const char *kBinanceHost{ "wss://stream.binance.com" };
+    const std::string BuildSubscribeMessage();
+private:
+    static constexpr const char *kBinanceHost{ "stream.binance.com" };
     static constexpr int kBinancePort{ 9443 };
 
-    ssl::context m_ctx;
-    net::io_context m_ioCtx;
-    std::unique_ptr<websocket::stream<ssl::stream<tcp::socket>>> m_ws;
+    /// \note: networking/websocket specific members
+    ssl::context ssl_ctx_;
+    net::io_context io_ctx_;
+    std::unique_ptr<websocket::stream<ssl::stream<tcp::socket>>> ws_;
+
+    const std::vector<std::string> instruments_;
 };
 }// namespace sigmax
