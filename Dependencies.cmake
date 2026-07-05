@@ -63,6 +63,12 @@ function(sigmax_setup_dependencies)
             "TRACY_ON_DEMAND OFF")
     endif()
 
+    # Boost
+    CPMAddPackage(
+    NAME Boost
+    URL "https://github.com/boostorg/boost/releases/download/boost-1.83.0/boost-1.83.0.tar.xz"
+    )
+
     # CPU INFOrmation library (pytorch/cpuinfo)
     if(NOT TARGET cpuinfo::cpuinfo)
         cpmaddpackage(
