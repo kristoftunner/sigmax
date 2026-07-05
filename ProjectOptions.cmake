@@ -61,43 +61,41 @@ macro(sigmax_setup_options)
     if(NOT PROJECT_IS_TOP_LEVEL
        OR sigmax_PACKAGING_MAINTAINER_MODE
        OR CMAKE_BUILD_TYPE MATCHES "Release")
-        option(sigmax_ENABLE_IPO "Enable IPO/LTO" OFF)
         option(sigmax_WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
-        option(sigmax_ENABLE_USER_LINKER "Enable user-selected linker" OFF)
-        option(sigmax_ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" OFF)
-        option(sigmax_ENABLE_SANITIZER_LEAK "Enable leak sanitizer" OFF)
-        option(sigmax_ENABLE_SANITIZER_UNDEFINED "Enable undefined sanitizer" OFF)
-        option(sigmax_ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
-        option(sigmax_ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" OFF)
+        set(sigmax_SANITIZER_DEFAULT "OFF")
         option(sigmax_ENABLE_UNITY_BUILD "Enable unity builds" OFF)
         option(sigmax_ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
         option(sigmax_ENABLE_CPPCHECK "Enable cpp-check analysis" OFF)
         option(sigmax_ENABLE_CACHE "Enable ccache" OFF)
     else()
-        option(sigmax_ENABLE_IPO "Enable IPO/LTO" ON)
         option(sigmax_WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
-        option(sigmax_ENABLE_USER_LINKER "Enable user-selected linker" OFF)
-        option(sigmax_ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" ${SUPPORTS_ASAN})
-        option(sigmax_ENABLE_SANITIZER_LEAK "Enable leak sanitizer" ON)
-        option(sigmax_ENABLE_SANITIZER_UNDEFINED "Enable undefined sanitizer" ${SUPPORTS_UBSAN})
-        option(sigmax_ENABLE_SANITIZER_THREAD "Enable thread sanitizer" ON)
-        option(sigmax_ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" ON)
+        if(SUPPORTS_ASAN)
+            set(sigmax_SANITIZER_DEFAULT "address")
+        else()
+            set(sigmax_SANITIZER_DEFAULT "OFF")
+        endif()
         option(sigmax_ENABLE_UNITY_BUILD "Enable unity builds" OFF)
         option(sigmax_ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
         option(sigmax_ENABLE_CPPCHECK "Enable cpp-check analysis" ON)
         option(sigmax_ENABLE_CACHE "Enable ccache" ON)
     endif()
 
+    # A single mutually-exclusive sanitizer choice (ASan, TSan and MSan cannot be combined)
+    set(sigmax_SANITIZER
+        "${sigmax_SANITIZER_DEFAULT}"
+        CACHE STRING "Sanitizer to enable: OFF, address, thread, memory")
+    set_property(
+        CACHE sigmax_SANITIZER
+        PROPERTY STRINGS
+                 OFF
+                 address
+                 thread
+                 memory)
+
     if(NOT PROJECT_IS_TOP_LEVEL)
         mark_as_advanced(
-            sigmax_ENABLE_IPO
             sigmax_WARNINGS_AS_ERRORS
-            sigmax_ENABLE_USER_LINKER
-            sigmax_ENABLE_SANITIZER_ADDRESS
-            sigmax_ENABLE_SANITIZER_LEAK
-            sigmax_ENABLE_SANITIZER_UNDEFINED
-            sigmax_ENABLE_SANITIZER_THREAD
-            sigmax_ENABLE_SANITIZER_MEMORY
+            sigmax_SANITIZER
             sigmax_ENABLE_UNITY_BUILD
             sigmax_ENABLE_CLANG_TIDY
             sigmax_ENABLE_CPPCHECK
@@ -106,10 +104,7 @@ macro(sigmax_setup_options)
     endif()
 
     sigmax_check_libfuzzer_support(LIBFUZZER_SUPPORTED)
-    if(LIBFUZZER_SUPPORTED
-       AND (sigmax_ENABLE_SANITIZER_ADDRESS
-            OR sigmax_ENABLE_SANITIZER_THREAD
-            OR sigmax_ENABLE_SANITIZER_UNDEFINED))
+    if(LIBFUZZER_SUPPORTED AND NOT sigmax_SANITIZER STREQUAL "OFF")
         set(DEFAULT_FUZZER ON)
     else()
         set(DEFAULT_FUZZER OFF)
@@ -120,14 +115,8 @@ macro(sigmax_setup_options)
     # print all selected options:
     message("--------------------------------")
     message("-- Selected options:")
-    message("-- sigmax_ENABLE_IPO: ${sigmax_ENABLE_IPO}")
     message("-- sigmax_WARNINGS_AS_ERRORS: ${sigmax_WARNINGS_AS_ERRORS}")
-    message("-- sigmax_ENABLE_USER_LINKER: ${sigmax_ENABLE_USER_LINKER}")
-    message("-- sigmax_ENABLE_SANITIZER_ADDRESS: ${sigmax_ENABLE_SANITIZER_ADDRESS}")
-    message("-- sigmax_ENABLE_SANITIZER_LEAK: ${sigmax_ENABLE_SANITIZER_LEAK}")
-    message("-- sigmax_ENABLE_SANITIZER_UNDEFINED: ${sigmax_ENABLE_SANITIZER_UNDEFINED}")
-    message("-- sigmax_ENABLE_SANITIZER_THREAD: ${sigmax_ENABLE_SANITIZER_THREAD}")
-    message("-- sigmax_ENABLE_SANITIZER_MEMORY: ${sigmax_ENABLE_SANITIZER_MEMORY}")
+    message("-- sigmax_SANITIZER: ${sigmax_SANITIZER}")
     message("-- sigmax_ENABLE_UNITY_BUILD: ${sigmax_ENABLE_UNITY_BUILD}")
     message("-- sigmax_ENABLE_CLANG_TIDY: ${sigmax_ENABLE_CLANG_TIDY}")
     message("-- sigmax_ENABLE_CPPCHECK: ${sigmax_ENABLE_CPPCHECK}")
@@ -137,25 +126,16 @@ macro(sigmax_setup_options)
 endmacro()
 
 macro(sigmax_global_options)
-    if(sigmax_ENABLE_IPO)
-        include(cmake/InterproceduralOptimization.cmake)
-        sigmax_enable_ipo()
-    endif()
-
     sigmax_supports_sanitizers()
 
     if(sigmax_ENABLE_HARDENING AND sigmax_ENABLE_GLOBAL_HARDENING)
         include(cmake/Hardening.cmake)
-        if(NOT SUPPORTS_UBSAN
-           OR sigmax_ENABLE_SANITIZER_UNDEFINED
-           OR sigmax_ENABLE_SANITIZER_ADDRESS
-           OR sigmax_ENABLE_SANITIZER_THREAD
-           OR sigmax_ENABLE_SANITIZER_LEAK)
+        if(NOT SUPPORTS_UBSAN OR NOT sigmax_SANITIZER STREQUAL "OFF")
             set(ENABLE_UBSAN_MINIMAL_RUNTIME FALSE)
         else()
             set(ENABLE_UBSAN_MINIMAL_RUNTIME TRUE)
         endif()
-        message("${sigmax_ENABLE_HARDENING} ${ENABLE_UBSAN_MINIMAL_RUNTIME} ${sigmax_ENABLE_SANITIZER_UNDEFINED}")
+        message("${sigmax_ENABLE_HARDENING} ${ENABLE_UBSAN_MINIMAL_RUNTIME} ${sigmax_SANITIZER}")
         sigmax_enable_hardening(sigmax_options ON ${ENABLE_UBSAN_MINIMAL_RUNTIME})
     endif()
 endmacro()
@@ -176,19 +156,8 @@ macro(sigmax_local_options)
         ""
         "")
 
-    if(sigmax_ENABLE_USER_LINKER)
-        include(cmake/Linker.cmake)
-        sigmax_configure_linker(sigmax_options)
-    endif()
-
     include(cmake/Sanitizers.cmake)
-    sigmax_enable_sanitizers(
-        sigmax_options
-        ${sigmax_ENABLE_SANITIZER_ADDRESS}
-        ${sigmax_ENABLE_SANITIZER_LEAK}
-        ${sigmax_ENABLE_SANITIZER_UNDEFINED}
-        ${sigmax_ENABLE_SANITIZER_THREAD}
-        ${sigmax_ENABLE_SANITIZER_MEMORY})
+    sigmax_enable_sanitizers(sigmax_options ${sigmax_SANITIZER})
 
     set_target_properties(sigmax_options PROPERTIES UNITY_BUILD ${sigmax_ENABLE_UNITY_BUILD})
 
@@ -222,11 +191,7 @@ macro(sigmax_local_options)
 
     if(sigmax_ENABLE_HARDENING AND NOT sigmax_ENABLE_GLOBAL_HARDENING)
         include(cmake/Hardening.cmake)
-        if(NOT SUPPORTS_UBSAN
-           OR sigmax_ENABLE_SANITIZER_UNDEFINED
-           OR sigmax_ENABLE_SANITIZER_ADDRESS
-           OR sigmax_ENABLE_SANITIZER_THREAD
-           OR sigmax_ENABLE_SANITIZER_LEAK)
+        if(NOT SUPPORTS_UBSAN OR NOT sigmax_SANITIZER STREQUAL "OFF")
             set(ENABLE_UBSAN_MINIMAL_RUNTIME FALSE)
         else()
             set(ENABLE_UBSAN_MINIMAL_RUNTIME TRUE)
