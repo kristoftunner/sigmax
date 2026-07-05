@@ -12,7 +12,7 @@ endif()
 # strongly encouraged to enable this globally to avoid conflicts between
 # -Wpedantic being enabled and -std=c++20 and -std=gnu++20 for example
 # when compiling with PCH enabled
-set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_EXTENSIONS ON)
 
 # Set the project name and language
 project(
@@ -50,9 +50,6 @@ target_compile_features(sigmax_options INTERFACE cxx_std_${CMAKE_CXX_STANDARD})
 add_library(sigmax::sigmax_options ALIAS sigmax_options)
 add_library(sigmax::sigmax_warnings ALIAS sigmax_warnings)
 
-# configure files based on CMake configuration options
-add_subdirectory(configured_files)
-
 # Adding the src:
 add_subdirectory(src)
 
@@ -74,8 +71,8 @@ endif()
 
 if(sigmax_BUILD_FUZZ_TESTS)
     message(AUTHOR_WARNING "Building Fuzz Tests, using fuzzing sanitizer https://www.llvm.org/docs/LibFuzzer.html")
-    if(NOT sigmax_ENABLE_SANITIZER_ADDRESS AND NOT sigmax_ENABLE_SANITIZER_THREAD)
-        message(WARNING "You need asan or tsan enabled for meaningful fuzz testing")
+    if(NOT sigmax_SANITIZER STREQUAL "address" AND NOT sigmax_SANITIZER STREQUAL "thread")
+        message(WARNING "You need the address or thread sanitizer enabled for meaningful fuzz testing")
     endif()
     add_subdirectory(fuzz_test)
 
