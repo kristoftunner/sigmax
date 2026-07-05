@@ -12,6 +12,9 @@ target_link_libraries(
 
 # Optionally link Tracy profiler
 target_link_libraries(sigmax PUBLIC Tracy::TracyClient Boost::headers Boost::system)
+
+# OpenSSL for Boost.Beast SSL/TLS (public: binance_api.hpp pulls in openssl headers)
+target_link_libraries(sigmax PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 target_compile_definitions(sigmax PUBLIC $<$<CONFIG:Debug>:TRACY_ENABLE>)
 
 target_include_directories(sigmax ${WARNING_GUARD} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/sigmax>)
@@ -24,6 +27,3 @@ set_target_properties(
                VISIBILITY_INLINES_HIDDEN YES)
 
 add_subdirectory(sigmax)
-
-add_executable(sigmax_app sigmax/sigmax_app.cpp)
-target_link_libraries(sigmax_app PRIVATE sigmax)

@@ -89,4 +89,20 @@ function(sigmax_setup_dependencies)
             3.2)
     endif()
 
+    # OpenSSL, built from source via a CMake wrapper (needed by Boost.Beast SSL)
+    if(NOT TARGET OpenSSL::SSL)
+        cpmaddpackage(
+            NAME
+            openssl-cmake
+            GITHUB_REPOSITORY
+            "jimmy-park/openssl-cmake"
+            GIT_TAG
+            3.5.4
+            OPTIONS
+            "OPENSSL_TARGET_VERSION 3.5.4"
+            "BUILD_SHARED_LIBS OFF"
+            "OPENSSL_TEST OFF"
+            "OPENSSL_INSTALL OFF")
+    endif()
+
 endfunction()
