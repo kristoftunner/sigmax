@@ -38,7 +38,7 @@ DBErrorType DataBase::SaveDbToFile(const std::filesystem::path &filePath)
     }
 }
 
-std::expected<const std::vector<Order>, DBErrorType> DataBase::GetOrders(const InstrumentId &instrumentId)
+std::expected<const std::vector<Order>, DBErrorType> DataBase::GetOrders(const Symbol &instrumentId)
 {
     if (!m_orders.contains(instrumentId) || !m_instrumentLocks.contains(instrumentId)) {
         return std::unexpected(DBErrorType::INSTRUMENT_NOT_FOUND);
@@ -50,7 +50,7 @@ std::expected<const std::vector<Order>, DBErrorType> DataBase::GetOrders(const I
 }
 
 std::expected<const std::vector<Order>, DBErrorType>
-    DataBase::GetOrders(const InstrumentId &instrumentId, const Timestamp start, const Timestamp end)
+    DataBase::GetOrders(const Symbol &instrumentId, const Timestamp start, const Timestamp end)
 {
     if (!m_orders.contains(instrumentId) || !m_instrumentLocks.contains(instrumentId)) {
         return std::unexpected(DBErrorType::INSTRUMENT_NOT_FOUND);

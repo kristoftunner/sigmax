@@ -18,7 +18,7 @@ TEST_F(MpscQueueTest, Push_SingleThread)
 {
     static constexpr int kQueueSize = 16;
     MpscQueue<int, kQueueSize> queue;
-    for (int i = 0; i < kQueueSize; i++) { EXPECT_EQ(queue.PushBack(i), QueueState::SUCCESS); }
+    for (int i = 0; i < kQueueSize; i++) { EXPECT_EQ(queue.PushBack(i), QueueRet::SUCCESS); }
 }
 
 /// \test Basic push and pop ops
@@ -26,9 +26,9 @@ TEST_F(MpscQueueTest, PushAndPop_SingleThread)
 {
     static constexpr int kQueueSize = 16;
     MpscQueue<int, kQueueSize> queue;
-    EXPECT_EQ(queue.PushBack(1), QueueState::SUCCESS);
-    EXPECT_EQ(queue.PushBack(2), QueueState::SUCCESS);
-    EXPECT_EQ(queue.PushBack(3), QueueState::SUCCESS);
+    EXPECT_EQ(queue.PushBack(1), QueueRet::SUCCESS);
+    EXPECT_EQ(queue.PushBack(2), QueueRet::SUCCESS);
+    EXPECT_EQ(queue.PushBack(3), QueueRet::SUCCESS);
     auto value = queue.Pop();
     EXPECT_TRUE(value.has_value());
     EXPECT_EQ(value.value(), 1);
@@ -40,7 +40,7 @@ TEST_F(MpscQueueTest, PushAndPop_SingleThread)
     EXPECT_EQ(value.value(), 3);
     value = queue.Pop();
     EXPECT_FALSE(value.has_value());
-    EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
+    EXPECT_EQ(value.error(), QueueRet::QUEUE_IS_EMPTY);
 }
 
 
@@ -48,7 +48,7 @@ TEST_F(MpscQueueTest, FillAndPopEmpty_SingleThread)
 {
     static constexpr int kQueueSize = 8;
     MpscQueue<int, kQueueSize> queue;
-    for (int i = 0; i < kQueueSize; i++) { EXPECT_EQ(queue.PushBack(i), QueueState::SUCCESS); }
+    for (int i = 0; i < kQueueSize; i++) { EXPECT_EQ(queue.PushBack(i), QueueRet::SUCCESS); }
 
     for (int i = 0; i < kQueueSize; i++) {
         auto value = queue.Pop();
@@ -57,7 +57,7 @@ TEST_F(MpscQueueTest, FillAndPopEmpty_SingleThread)
     }
     auto value = queue.Pop();
     EXPECT_FALSE(value.has_value());
-    EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
+    EXPECT_EQ(value.error(), QueueRet::QUEUE_IS_EMPTY);
 }
 
 TEST_F(MpscQueueTest, OverflowTwice_SingleThread)
@@ -69,7 +69,7 @@ TEST_F(MpscQueueTest, OverflowTwice_SingleThread)
         for (int j{ 0 }; j < kQueueSize; j++) { queue.PushBack(j); }
         for (int k{ 0 }; k < 2; k++) {
             auto ret = queue.PushBack(10 + k);
-            EXPECT_EQ(ret, QueueState::QUEUE_IS_FULL);
+            EXPECT_EQ(ret, QueueRet::QUEUE_IS_FULL);
         }
 
         for (int j{ 0 }; j < kQueueSize; j++) {
@@ -80,11 +80,11 @@ TEST_F(MpscQueueTest, OverflowTwice_SingleThread)
 
         auto value = queue.Pop();
         EXPECT_FALSE(value.has_value());
-        EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
+        EXPECT_EQ(value.error(), QueueRet::QUEUE_IS_EMPTY);
 
         value = queue.Pop();
         EXPECT_FALSE(value.has_value());
-        EXPECT_EQ(value.error(), QueueState::QUEUE_IS_EMPTY);
+        EXPECT_EQ(value.error(), QueueRet::QUEUE_IS_EMPTY);
     }
 }
 
@@ -108,7 +108,7 @@ TEST_F(MpscQueueTest, MultipleConsumerTest1)
         while (i < kQueueSize / 2) {
 
             auto ret = queue.PushBack(1);
-            EXPECT_EQ(ret, QueueState::SUCCESS);
+            EXPECT_EQ(ret, QueueRet::SUCCESS);
             i++;
         }
     };
@@ -119,7 +119,7 @@ TEST_F(MpscQueueTest, MultipleConsumerTest1)
         while (i < kQueueSize / 2) {
 
             auto ret = queue.PushBack(2);
-            EXPECT_EQ(ret, QueueState::SUCCESS);
+            EXPECT_EQ(ret, QueueRet::SUCCESS);
             i++;
         }
     };
