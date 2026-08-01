@@ -19,9 +19,9 @@ public:
     DBErrorType UpdateDb(const Order &&order);
     DBErrorType SaveDbToFile(const std::filesystem::path &filePath);
     // one-copy DB read functions
-    std::expected<const std::vector<Order>, DBErrorType> GetOrders(const InstrumentId &instrumentId);
+    std::expected<const std::vector<Order>, DBErrorType> GetOrders(const Symbol &instrumentId);
     std::expected<const std::vector<Order>, DBErrorType>
-        GetOrders(const InstrumentId &instrumentId, const Timestamp start, const Timestamp end);
+        GetOrders(const Symbol &instrumentId, const Timestamp start, const Timestamp end);
 
     DBErrorType AppendCallbackFn(std::function<void(const Order &order)>);
 
@@ -29,8 +29,8 @@ private:
     static constexpr int kInputQueueSize{ 1024 };
     std::vector<std::function<void(const Order &order)>> m_algoCallbackFns;
     // TODO: improve the perf using an isntrument id enum and vectors instead of maps
-    std::map<InstrumentId, std::vector<Order>> m_orders;
-    std::map<InstrumentId, std::mutex> m_instrumentLocks;
+    std::map<Symbol, std::vector<Order>> m_orders;
+    std::map<Symbol, std::mutex> m_instrumentLocks;
     MpscQueue<Order, kInputQueueSize> m_queue;
 };
 }// namespace sigmax

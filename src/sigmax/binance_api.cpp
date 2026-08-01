@@ -10,6 +10,7 @@
 namespace sigmax {
 
 BinanceApi::BinanceApi(const std::vector<std::string> instruments) : instruments_(instruments), ssl_ctx_{ ssl::context::tlsv12_client } {}
+
 const std::string BinanceApi::BuildSubscribeMessage()
 {
     std::string base_message = R"({
@@ -89,7 +90,7 @@ BinanceApi::ApiReturn BinanceApi::Connect()
         return ApiReturn::CONNECTION_ERROR;
     }
 
-    const auto subscribe_msg = BuildSubscribeMessage();
+    const std::string subscribe_msg = BuildSubscribeMessage();
     ws_->write(net::buffer(subscribe_msg), ec);
     if (ec.failed()) {
         LOG_ERROR("Failed to send subscribe msg: {} - {}", subscribe_msg, ec.message());
@@ -111,6 +112,7 @@ BinanceApi::ApiReturn BinanceApi::Close() { ws_->close(websocket::close_code::no
 
 std::expected<beast::flat_buffer, BinanceApi::ApiReturn> BinanceApi::Read()
 {
+    /// TODO: TECH DEBT - use async read instead
     beast::flat_buffer buffer;
     boost::system::error_code ec;
     ws_->read(buffer, ec);
