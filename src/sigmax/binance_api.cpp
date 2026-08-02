@@ -3,6 +3,9 @@
 #include <boost/beast/core/buffers_cat.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/http/field.hpp>
+#include <boost/json.hpp>
+#include <boost/json/value.hpp>
+#include <boost/system/detail/error_code.hpp>
 #include <string>
 
 #include "log.hpp"
@@ -49,7 +52,7 @@ BinanceApi::ApiReturn BinanceApi::Connect()
     // Make the connection on the IP address we get from a lookup
     auto ep = net::connect(boost::beast::get_lowest_layer(*ws_.get()), results, ec);
     if (ec.failed()) {
-        LOG_ERROR("Failed to connect to {}: {}", results->host_name(), ec.message());
+        LOG_ERROR("Failed to connect to {}: {}", results.begin()->host_name(), ec.message());
         return ApiReturn::CONNECTION_ERROR;
     }
 
@@ -110,7 +113,9 @@ BinanceApi::ApiReturn BinanceApi::Connect()
 
 BinanceApi::ApiReturn BinanceApi::Close() { ws_->close(websocket::close_code::normal); }
 
-std::expected<beast::flat_buffer, BinanceApi::ApiReturn> BinanceApi::Read()
+static std::optional<BookEvent> ParseBookEvent(const boost::json::value &message) {}
+
+std::expected<BookEvent, BinanceApi::ApiReturn> BinanceApi::Read()
 {
     /// TODO: TECH DEBT - use async read instead
     beast::flat_buffer buffer;
@@ -119,8 +124,22 @@ std::expected<beast::flat_buffer, BinanceApi::ApiReturn> BinanceApi::Read()
     if (ec.failed()) {
         LOG_ERROR("Failed to read from websocket: {}", ec.message());
         return std::unexpected(ApiReturn::CONNECTION_ERROR);
+    }
+
+    /// Parse book event
+    std::string_view sv{ static_cast<const char *>(buffer.cdata().data()), buffer.size() };
+    boost::json::value message{ boost::json::parse(sv, ec) };
+    if (!ec) {
+        LOG_ERROR("Failed to parse input message into json: {}", sv);
+        return std::unexpected(ApiReturn::INVALID_MESSAGE);
+    }
+    const auto bookEvent{ ParseBookEvent(message) };
+
+    if (bookEvent) {
+        return bookEvent.value();
     } else {
-        return std::move(buffer);
+        LOG_ERROR("Failed to parse message into BookEvent: {}", sv);
+        return std::unexpected(ApiReturn::INVALID_MESSAGE);
     }
 }
 }// namespace sigmax

@@ -13,6 +13,14 @@ if [[ ${?} -ne 0 ]]; then
   exit 1
 fi
 
-sudo apt install build-essential clang-format clangd libssl-dev libboost-dev libboost-system-dev
+sudo apt install build-essential clang-format clangd libssl-dev
+
+# Boost is built from source into ext/ - the distro package is too old for
+# Boost.JSON (needs >= 1.75). No-op if it is already installed.
+${SCRIPT_DIR_PATH}/scripts/build_boost.sh
+if [[ ${?} -ne 0 ]]; then
+  echo "<<! Failed to build Boost"
+  exit 1
+fi
 
 command -v perf >/dev/null 2>&1 && echo "" || echo "Please install perf according to the linux system you are using"

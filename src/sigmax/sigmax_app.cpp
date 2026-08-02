@@ -3,8 +3,8 @@
 #include <thread>
 
 #include "binance_api.hpp"
-#include "sigmax_exit_codes.hpp"
 #include "log.hpp"
+#include "sigmax_exit_codes.hpp"
 
 using namespace sigmax;
 

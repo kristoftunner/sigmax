@@ -1,4 +1,12 @@
-find_package(Boost REQUIRED CONFIG COMPONENTS system)
+# Boost is built from source into ext/ by scripts/build_boost.sh. The Ubuntu
+# 22.04 system package is 1.74, which predates Boost.JSON (added in 1.75), so
+# the version floor below also guards against silently picking it up.
+if(NOT DEFINED Boost_ROOT AND EXISTS "${PROJECT_SOURCE_DIR}/ext/boost")
+    set(Boost_ROOT "${PROJECT_SOURCE_DIR}/ext/boost")
+endif()
+# Boost.System is header-only as of 1.91 and ships no component of its own;
+# Boost::headers covers it, along with Beast and Asio.
+find_package(Boost 1.91 REQUIRED CONFIG COMPONENTS json)
 
 add_library(sigmax STATIC)
 add_library(sigmax::sigmax ALIAS sigmax)
@@ -11,7 +19,7 @@ target_link_libraries(
            nlohmann_json::nlohmann_json)
 
 # Optionally link Tracy profiler
-target_link_libraries(sigmax PUBLIC Tracy::TracyClient Boost::headers Boost::system)
+target_link_libraries(sigmax PUBLIC Tracy::TracyClient Boost::headers Boost::json)
 
 # OpenSSL for Boost.Beast SSL/TLS (public: binance_api.hpp pulls in openssl headers)
 target_link_libraries(sigmax PUBLIC OpenSSL::SSL OpenSSL::Crypto)

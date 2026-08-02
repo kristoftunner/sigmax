@@ -5,6 +5,9 @@ out/coverage/*
 cmake-build-*/
 conan-cache/
 
+# Locally built dependencies (see scripts/build_boost.sh)
+ext/
+
 # User spesific settings
 CMakeUserPresets.json
 

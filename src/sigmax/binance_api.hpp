@@ -8,6 +8,8 @@
 #include <boost/beast/websocket.hpp>
 #include <boost/beast/websocket/ssl.hpp>
 
+#include "order_type.hpp"
+
 namespace net = boost::asio;// from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl;// from <boost/asio/ssl.hpp>
 namespace http = boost::beast::http;// from <boost/beast/http.hpp>
@@ -25,16 +27,21 @@ public:
         SUCCESS = 0,
         CONNECTION_ERROR = 1,
         SUBSCRIPTION_ERROR = 2,
+        INVALID_MESSAGE = 3,
     };
+
 public:
     BinanceApi(const std::vector<std::string> instruments);
 
     ApiReturn Connect();
-    std::expected<beast::flat_buffer, ApiReturn> Read();
+
+    /// \brief Read a finite amount of BookEvents from binance
+    std::expected<BookEvent, ApiReturn> Read();
     ApiReturn Close();
 
 private:
     const std::string BuildSubscribeMessage();
+
 private:
     static constexpr const char *kBinanceHost{ "stream.binance.com" };
     static constexpr int kBinancePort{ 9443 };
