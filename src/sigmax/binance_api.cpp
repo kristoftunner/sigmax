@@ -3,6 +3,7 @@
 #include <charconv>
 #include <cstdlib>
 #include <optional>
+#include <string>
 
 #include <boost/beast/core/buffers_cat.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
@@ -10,7 +11,6 @@
 #include <boost/json.hpp>
 #include <boost/json/value.hpp>
 #include <boost/system/detail/error_code.hpp>
-#include <string>
 
 #include "log.hpp"
 #include "order_type.hpp"
@@ -118,7 +118,7 @@ BinanceApi::ApiReturn BinanceApi::Connect()
 
 BinanceApi::ApiReturn BinanceApi::Close() { ws_->close(websocket::close_code::normal); }
 
-static std::optional<std::int64_t> ParseFixed(const std::string_view &fp_number)
+std::optional<std::int64_t> ParseFixed(const std::string_view &fp_number)
 {
     /// Find the "." -> if not found, ret nullopt
     /// calculate the number: 10e8 * integer part + 10e(8 - partial part numbers) * partial part
@@ -143,7 +143,7 @@ static std::optional<std::int64_t> ParseFixed(const std::string_view &fp_number)
     return std::nullopt;
 }
 
-static std::optional<BidsAsks> ParseBidAsk(const boost::json::array &tuple)
+std::optional<BidsAsks> ParseBidAsk(const boost::json::array &tuple)
 {
     const std::string price_str{ tuple[0].as_string() };
     const std::string quantity_str{ tuple[1].as_string() };
@@ -159,8 +159,19 @@ static std::optional<BidsAsks> ParseBidAsk(const boost::json::array &tuple)
 }
 
 /// @brief Parsing a book event
-/// Example message:
-static std::optional<BookDepthUpdate> ParseBookEvent(const boost::json::value &message)
+/// @details Example message:
+/// {
+///   "e":"depthUpdate",
+///   "E":1786886403206,
+///   "s":"BNBUSDT",
+///   "U":20350592474,
+///   "u":20350592477,
+///   "b":[
+///         ["608.12000000","19.03700000"],
+///         ["608.10000000","24.89700000"]],
+///   "a":[
+///         ["608.19000000","61.90000000"]]}
+std::optional<BookDepthUpdate> ParseBookEvent(const boost::json::value &message)
 {
     BookDepthUpdate event{};
     try {

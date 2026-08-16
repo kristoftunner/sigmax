@@ -1,4 +1,5 @@
 #include <expected>
+#include <optional>
 
 #include <boost/asio/local/stream_protocol.hpp>
 #include <boost/asio/ssl.hpp>
@@ -7,6 +8,8 @@
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/websocket.hpp>
 #include <boost/beast/websocket/ssl.hpp>
+#include <boost/json.hpp>
+#include <boost/json/value.hpp>
 
 #include "order_type.hpp"
 
@@ -56,4 +59,9 @@ private:
 
     const std::vector<std::string> instruments_;
 };
+
+/// \note Helper functions to parse the message
+std::optional<BookDepthUpdate> ParseBookEvent(const boost::json::value &message);
+std::optional<BidsAsks> ParseBidAsk(const boost::json::array &tuple);
+std::optional<std::int64_t> ParseFixed(const std::string_view &fp_number);
 }// namespace sigmax
