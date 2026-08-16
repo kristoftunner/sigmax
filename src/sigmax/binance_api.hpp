@@ -61,6 +61,20 @@ private:
 };
 
 /// \note Helper functions to parse the message
+
+/// \brief Parsing a book event
+/// \details Example message:
+/// {
+///   "e":"depthUpdate",
+///   "E":1786886403206,
+///   "s":"BNBUSDT",
+///   "U":20350592474,
+///   "u":20350592477,
+///   "b":[
+///         ["608.12000000","19.03700000"],
+///         ["608.10000000","24.89700000"]],
+///   "a":[
+///         ["608.19000000","61.90000000"]]}
 std::optional<BookDepthUpdate> ParseBookEvent(const boost::json::value &message);
 std::optional<BidsAsks> ParseBidAsk(const boost::json::array &tuple);
 std::optional<std::int64_t> ParseFixed(const std::string_view &fp_number);

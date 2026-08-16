@@ -7,7 +7,7 @@ namespace sigmax {
 
 enum class OrderSide : std::uint8_t { BUY, SELL };
 enum class OrderState : std::uint8_t { NEW, PARTIAL, FILLED, CANCELLED };
-enum class Symbol : std::uint16_t { BNBBTC };
+enum class Symbol : std::uint16_t { BNBBTC, BNBUSDT };
 
 using int64 = std::int64_t;
 using uint32 = std::uint32_t;
