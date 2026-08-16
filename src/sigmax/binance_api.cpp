@@ -1,5 +1,9 @@
 #include "binance_api.hpp"
 
+#include <charconv>
+#include <cstdlib>
+#include <optional>
+
 #include <boost/beast/core/buffers_cat.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/http/field.hpp>
@@ -9,6 +13,7 @@
 #include <string>
 
 #include "log.hpp"
+#include "order_type.hpp"
 
 namespace sigmax {
 
@@ -113,9 +118,75 @@ BinanceApi::ApiReturn BinanceApi::Connect()
 
 BinanceApi::ApiReturn BinanceApi::Close() { ws_->close(websocket::close_code::normal); }
 
-static std::optional<BookEvent> ParseBookEvent(const boost::json::value &message) {}
+static std::optional<std::int64_t> ParseFixed(const std::string_view &fp_number)
+{
+    /// Find the "." -> if not found, ret nullopt
+    /// calculate the number: 10e8 * integer part + 10e(8 - partial part numbers) * partial part
+    if (const std::size_t point_idx{ fp_number.find(".") }; point_idx != std::string_view::npos) {
+        int64 real_part{ 0 }, fractional_part{ 0 };
+        const std::string_view real_part_str{ fp_number.substr(0, point_idx) };
+        const std::string_view fractional_part_str{ fp_number.substr(point_idx + 1, fp_number.size() - (point_idx + 1)) };
+        auto [_1, ec_real]{ std::from_chars(real_part_str.data(), real_part_str.data() + real_part_str.size(), real_part) };
 
-std::expected<BookEvent, BinanceApi::ApiReturn> BinanceApi::Read()
+        /// truncate the franctional parts to 8 decimals, since that is the maximum we represent in the fixed point number
+        const std::size_t frac_decimals = fractional_part_str.size() > 8 ? 8 : fractional_part_str.size();
+        auto [_2,
+            ec_fractional]{ std::from_chars(fractional_part_str.data(), fractional_part_str.data() + frac_decimals, fractional_part) };
+        if ((ec_real == std::errc()) && (ec_fractional == std::errc())) {
+            const int64 real{ static_cast<int64>(pow(10, kFixedPointShift)) * real_part };
+            const int64 fractional{ static_cast<int64>(pow(10, kFixedPointShift - frac_decimals)) * fractional_part };
+            const int64 result{ real_part + fractional_part };
+            return result;
+        }
+    }
+
+    return std::nullopt;
+}
+
+static std::optional<BidsAsks> ParseBidAsk(const boost::json::array &tuple)
+{
+    const std::string price_str{ tuple[0].as_string() };
+    const std::string quantity_str{ tuple[1].as_string() };
+    const auto price{ ParseFixed(price_str) };
+    const auto quantity{ ParseFixed(quantity_str) };
+    if (price && quantity) {
+        return BidsAsks{ price.value(), quantity.value() };
+    } else {
+        if (!price) LOG_ERROR("Failed to parse string to price: {price_str}");
+        if (!quantity) LOG_ERROR("Failed to parse string to price: {quantity_str}");
+        return std::nullopt;
+    }
+}
+
+/// @brief Parsing a book event
+/// Example message:
+static std::optional<BookDepthUpdate> ParseBookEvent(const boost::json::value &message)
+{
+    BookDepthUpdate event{};
+    try {
+        const std::string evet_type{ boost::json::value_to<std::string>(message.at("e")) };
+        event.event_ts = boost::json::value_to<Timestamp>(message.at("E"));
+        const std::string symbol_str{ boost::json::value_to<std::string>(message.at("s")) };
+        event.symbol = StrToSymbol(symbol_str);
+        event.first_update_id = boost::json::value_to<std::int64_t>(message.at("U"));
+        event.final_update_id = boost::json::value_to<std::int64_t>(message.at("u"));
+        const boost::json::array &bids{ message.at("b").as_array() };
+        for (const boost::json::value &val : bids) {
+            const std::optional<BidsAsks> bid{ ParseBidAsk(val.as_array()) };
+            if (bid) { event.bids.emplace_back(bid.value()); }
+        }
+        const boost::json::array &asks{ message.at("a").as_array() };
+        for (const boost::json::value &val : asks) {
+            const std::optional<BidsAsks> ask{ ParseBidAsk(val.as_array()) };
+            if (ask) { event.asks.emplace_back(ask.value()); }
+        }
+
+    } catch (boost::system::system_error &error) {
+        return std::nullopt;
+    }
+}
+
+std::expected<BookDepthUpdate, BinanceApi::ApiReturn> BinanceApi::DepthUpdate()
 {
     /// TODO: TECH DEBT - use async read instead
     beast::flat_buffer buffer;

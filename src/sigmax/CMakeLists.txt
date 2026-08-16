@@ -5,12 +5,12 @@ target_link_libraries(sigmax_app PRIVATE sigmax)
 target_sources(
     sigmax
     PRIVATE 
-    #database.cpp
     mpsc_queue.cpp
     log.cpp
     binance_api.hpp
     binance_api.cpp
     order_type.hpp
+    order_type.cpp
     database.hpp
     instruments.hpp
     mpsc_queue.hpp

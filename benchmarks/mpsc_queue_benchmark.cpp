@@ -22,17 +22,17 @@ MpscQueueBenchmark::MpscQueueBenchmark(const std::filesystem::path &benchmarkRes
 
 template<typename QueueSize> bool MpscQueueBenchmark::RunBenchmark(int producerCount)
 {
-    using QueueType = MpscQueue<BookEvent, QueueSize::value>;
+    using QueueType = MpscQueue<BookDepthUpdate, QueueSize::value>;
     using Counters = std::pair<std::size_t, std::size_t>;// {attempts, successes}
 
     // constantly writing and reading from the queue
     auto writer = [](QueueType &queue, std::shared_future<void> &ready, const std::atomic<bool> &stop) -> Counters {
-        BookEvent event{ .event_ts = 0,
+        BookDepthUpdate event{ .event_ts = 0,
             .symbol = Symbol::BNBBTC,
             .first_update_id = 0,
             .final_update_id = 0,
-            .bids = { BidsAsks{ .quantity = 100, .price = 100 } },
-            .asks = { BidsAsks{ .quantity = 100, .price = 101 } } };
+            .bids = { BidsAsks{.price = 100, .quantity = 100 } },
+            .asks = { BidsAsks{.price = 101, .quantity = 100 } } };
         ready.wait();
         std::size_t pushCount{ 0 };
         std::size_t successfulPushes{ 0 };
@@ -60,7 +60,7 @@ template<typename QueueSize> bool MpscQueueBenchmark::RunBenchmark(int producerC
     nlohmann::json singleBenchmarkResult;
     singleBenchmarkResult["producerCount"] = producerCount;
     singleBenchmarkResult["queueCapacity"] = QueueSize::value;
-    singleBenchmarkResult["queueSize"] = QueueSize::value * sizeof(BookEvent);
+    singleBenchmarkResult["queueSize"] = QueueSize::value * sizeof(BookDepthUpdate);
     QueueType queue;
     std::promise<void> go;
     std::shared_future<void> ready(go.get_future().share());

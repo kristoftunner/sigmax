@@ -12,6 +12,7 @@ namespace sigmax {
 #define LOG_INFO(...) Logger::GetLogger()->info(__VA_ARGS__)
 #define LOG_WARN(...) Logger::GetLogger()->warn(__VA_ARGS__)
 #define LOG_ERROR(...) Logger::GetLogger()->error(__VA_ARGS__)
+#define LOG_FATAL(...) Logger::GetLogger()->critical(__VA_ARGS__)
 
 class Logger
 {

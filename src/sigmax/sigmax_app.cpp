@@ -16,7 +16,7 @@ int main()
     if (api.Connect() != BinanceApi::ApiReturn::SUCCESS) { std::_Exit(static_cast<int>(SigmaxExitCodes::BINANCE_API_ERROR)); }
 
     std::thread binanceApiTh([&]() {
-        while (true) { api.Read(); }
+        //while (true) { api.Read(); }
     });
 
     return 0;

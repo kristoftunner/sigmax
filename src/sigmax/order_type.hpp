@@ -15,21 +15,34 @@ using uint32 = std::uint32_t;
 using Timestamp = int64;
 using OrderId = int64;// using an int because of the undefined overflow behavour of uints
 
+constexpr const int64 kFixedPointShift{ 100000000 };
+
+Symbol StrToSymbol(const std::string_view &symbol_str);
+
 // TODO: use better instrument id
 // lets use a string for now for the instrument ID and use an enum or an integer later with a proper
 // perf analysis
 struct BidsAsks
 {
-    std::int64_t quantity;
-    std::int64_t price;
+    int64_t price;
+    int64_t quantity;
 };
 
-struct BookEvent
+struct BookDepthUpdate
 {
     Timestamp event_ts;
     Symbol symbol;// later probably this should be an enum
-    std::uint32_t first_update_id;
-    std::uint32_t final_update_id;
+    int64_t first_update_id;
+    int64_t final_update_id;
+    std::vector<BidsAsks> bids;
+    std::vector<BidsAsks> asks;
+};
+
+struct BookInitData
+{
+    Timestamp event_ts;
+    Symbol symbol;// later probably this should be an enum
+    uint32_t update_id;
     std::vector<BidsAsks> bids;
     std::vector<BidsAsks> asks;
 };

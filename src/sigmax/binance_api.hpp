@@ -19,6 +19,7 @@ namespace beast = boost::beast;
 using tcp = boost::asio::ip::tcp;// from <boost/asio/ip/tcp.hpp>
 
 namespace sigmax {
+/// @brief Binance API connector to get binance trading tick data - this is not yet for trading actually
 class BinanceApi
 {
 public:
@@ -36,7 +37,9 @@ public:
     ApiReturn Connect();
 
     /// \brief Read a finite amount of BookEvents from binance
-    std::expected<BookEvent, ApiReturn> Read();
+    std::expected<BookDepthUpdate, ApiReturn> DepthUpdate();
+    std::expected<BookInitData, ApiReturn> GetBookInitData();
+
     ApiReturn Close();
 
 private:
