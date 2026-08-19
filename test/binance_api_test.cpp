@@ -20,8 +20,9 @@ TEST_F(BinanceApiTests, TestDiffDepthMessageParsing)
         { "s", "BNBUSDT" },
         { "U", kFirstUpdateId },
         { "u", kLastUpdateId },
-        { "b", { { "608.12000000", "19.03700000" }, { "608.10000000", "24.89700000" } } },
-        { "a", { { "608.19000000", "61.90000000" } } } };
+        { "b", boost::json::array{ boost::json::array{ "608.12000000", "19.03700000" },
+              boost::json::array{ "608.10000000", "24.89700000" } } },
+        { "a", boost::json::array{ boost::json::array{ "608.19000000", "61.90000000" } } } };
 
     const std::optional<BookDepthUpdate> diff_depth{ ParseBookEvent(json_message) };
 
@@ -29,7 +30,7 @@ TEST_F(BinanceApiTests, TestDiffDepthMessageParsing)
     const BookDepthUpdate &diff_depth_val{ diff_depth.value() };
     EXPECT_EQ(diff_depth_val.first_update_id, kFirstUpdateId);
     EXPECT_EQ(diff_depth_val.final_update_id, kLastUpdateId);
-    EXPECT_EQ(diff_depth_val.symbol, Symbol::BNBBTC);
+    EXPECT_EQ(diff_depth_val.symbol, Symbol::BNBUSDT);
     EXPECT_EQ(diff_depth_val.event_ts, 1786886403206);
 
     const std::vector<BidsAsks> expected_bids{ { 60812000000, 1903700000 }, { 60810000000, 2489700000 } };
