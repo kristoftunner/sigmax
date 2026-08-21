@@ -1,11 +1,19 @@
 #include "binance_api.hpp"
 
+#include <charconv>
+#include <cstdlib>
+#include <optional>
+#include <string>
+
 #include <boost/beast/core/buffers_cat.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/http/field.hpp>
-#include <string>
+#include <boost/json.hpp>
+#include <boost/json/value.hpp>
+#include <boost/system/detail/error_code.hpp>
 
 #include "log.hpp"
+#include "order_type.hpp"
 
 namespace sigmax {
 
@@ -17,7 +25,7 @@ const std::string BinanceApi::BuildSubscribeMessage()
         "method": "SUBSCRIBE",
         "params": [
         )";
-    for (const std::string &instrument : instruments_) { base_message += "\"" + instrument + "@bookTicker\","; }
+    for (const std::string &instrument : instruments_) { base_message += "\"" + instrument + "@depth@100ms\","; }
     base_message += R"({
         ],
         "id": 1
@@ -49,7 +57,7 @@ BinanceApi::ApiReturn BinanceApi::Connect()
     // Make the connection on the IP address we get from a lookup
     auto ep = net::connect(boost::beast::get_lowest_layer(*ws_.get()), results, ec);
     if (ec.failed()) {
-        LOG_ERROR("Failed to connect to {}: {}", results->host_name(), ec.message());
+        LOG_ERROR("Failed to connect to {}: {}", results.begin()->host_name(), ec.message());
         return ApiReturn::CONNECTION_ERROR;
     }
 
@@ -110,7 +118,99 @@ BinanceApi::ApiReturn BinanceApi::Connect()
 
 BinanceApi::ApiReturn BinanceApi::Close() { ws_->close(websocket::close_code::normal); }
 
-std::expected<beast::flat_buffer, BinanceApi::ApiReturn> BinanceApi::Read()
+std::optional<std::int64_t> ParseFixed(const std::string_view &fp_number)
+{
+    /// Find the "." -> if not found, ret nullopt
+    /// calculate the number: 10e8 * integer part + 10e(8 - partial part numbers) * partial part
+    if (const std::size_t point_idx{ fp_number.find(".") }; point_idx != std::string_view::npos) {
+        int64 real_part{ 0 }, fractional_part{ 0 };
+        const std::string_view real_part_str{ fp_number.substr(0, point_idx) };
+        const std::string_view fractional_part_str{ fp_number.substr(point_idx + 1, fp_number.size() - (point_idx + 1)) };
+        auto [_1, ec_real]{ std::from_chars(real_part_str.data(), real_part_str.data() + real_part_str.size(), real_part) };
+
+        /// truncate the franctional parts to 8 decimals, since that is the maximum we represent in the fixed point number
+        const std::size_t frac_decimals = fractional_part_str.size() > 8 ? 8 : fractional_part_str.size();
+        auto [_2,
+            ec_fractional]{ std::from_chars(fractional_part_str.data(), fractional_part_str.data() + frac_decimals, fractional_part) };
+        if ((ec_real == std::errc()) && (ec_fractional == std::errc())) {
+            int64 fractional_scale{ kFixedPointShift };
+            for (std::size_t decimal{ 0 }; decimal < frac_decimals; ++decimal) { fractional_scale /= 10; }
+            const int64 real{ kFixedPointShift * real_part };
+            const int64 fractional{ fractional_scale * fractional_part };
+            const int64 result{ real + fractional };
+            return result;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<BidsAsks> ParseBidAsk(const boost::json::array &tuple)
+{
+    for(const boost::json::value &val : tuple) {
+        if (!val.is_string()) {
+            return std::nullopt;
+        }
+    }
+    if(tuple.size() != 2) {
+        LOG_ERROR("Invalid bid/ask tuple size: {}", tuple.size());
+        return std::nullopt;
+    }
+    const std::string price_str{ tuple[0].as_string() };
+    const std::string quantity_str{ tuple[1].as_string() };
+    const auto price{ ParseFixed(price_str) };
+    const auto quantity{ ParseFixed(quantity_str) };
+    if (price && quantity) {
+        return BidsAsks{ price.value(), quantity.value() };
+    } else {
+        if (!price) LOG_ERROR("Failed to parse string to price: {price_str}");
+        if (!quantity) LOG_ERROR("Failed to parse string to price: {quantity_str}");
+        return std::nullopt;
+    }
+}
+
+std::optional<BookDepthUpdate> ParseBookEvent(const boost::json::value &message)
+{
+    BookDepthUpdate event{};
+    try {
+        const std::string evet_type{ boost::json::value_to<std::string>(message.at("e")) };
+        event.event_ts = boost::json::value_to<Timestamp>(message.at("E"));
+        const std::string symbol_str{ boost::json::value_to<std::string>(message.at("s")) };
+        event.symbol = StrToSymbol(symbol_str);
+        event.first_update_id = boost::json::value_to<std::int64_t>(message.at("U"));
+        event.final_update_id = boost::json::value_to<std::int64_t>(message.at("u"));
+        const boost::json::value &bids_value{ message.at("b") };
+        const boost::json::value &asks_value{ message.at("a") };
+        if (!bids_value.is_array() || !asks_value.is_array()) {
+            LOG_ERROR("Invalid depth update: bids and asks must be arrays");
+            return std::nullopt;
+        }
+        const boost::json::array &bids{ bids_value.get_array() };
+        for (const boost::json::value &val : bids) {
+            if (!val.is_array()) {
+                LOG_ERROR("Invalid bid entry: expected an array");
+                continue;
+            }
+            const std::optional<BidsAsks> bid{ ParseBidAsk(val.get_array()) };
+            if (bid) { event.bids.emplace_back(bid.value()); }
+        }
+        const boost::json::array &asks{ asks_value.get_array() };
+        for (const boost::json::value &val : asks) {
+            if (!val.is_array()) {
+                LOG_ERROR("Invalid ask entry: expected an array");
+                continue;
+            }
+            const std::optional<BidsAsks> ask{ ParseBidAsk(val.get_array()) };
+            if (ask) { event.asks.emplace_back(ask.value()); }
+        }
+
+        return event;
+    } catch (boost::system::system_error &error) {
+        return std::nullopt;
+    }
+}
+
+std::expected<BookDepthUpdate, BinanceApi::ApiReturn> BinanceApi::DepthUpdate()
 {
     /// TODO: TECH DEBT - use async read instead
     beast::flat_buffer buffer;
@@ -119,8 +219,22 @@ std::expected<beast::flat_buffer, BinanceApi::ApiReturn> BinanceApi::Read()
     if (ec.failed()) {
         LOG_ERROR("Failed to read from websocket: {}", ec.message());
         return std::unexpected(ApiReturn::CONNECTION_ERROR);
+    }
+
+    /// Parse book event
+    std::string_view sv{ static_cast<const char *>(buffer.cdata().data()), buffer.size() };
+    boost::json::value message{ boost::json::parse(sv, ec) };
+    if (ec) {
+        LOG_ERROR("Failed to parse input message into json: {}", sv);
+        return std::unexpected(ApiReturn::INVALID_MESSAGE);
+    }
+    const auto bookEvent{ ParseBookEvent(message) };
+
+    if (bookEvent) {
+        return bookEvent.value();
     } else {
-        return std::move(buffer);
+        LOG_ERROR("Failed to parse message into BookEvent: {}", sv);
+        return std::unexpected(ApiReturn::INVALID_MESSAGE);
     }
 }
 }// namespace sigmax

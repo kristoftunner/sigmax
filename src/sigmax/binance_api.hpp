@@ -1,4 +1,5 @@
 #include <expected>
+#include <optional>
 
 #include <boost/asio/local/stream_protocol.hpp>
 #include <boost/asio/ssl.hpp>
@@ -7,6 +8,10 @@
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/websocket.hpp>
 #include <boost/beast/websocket/ssl.hpp>
+#include <boost/json.hpp>
+#include <boost/json/value.hpp>
+
+#include "order_type.hpp"
 
 namespace net = boost::asio;// from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl;// from <boost/asio/ssl.hpp>
@@ -17,6 +22,7 @@ namespace beast = boost::beast;
 using tcp = boost::asio::ip::tcp;// from <boost/asio/ip/tcp.hpp>
 
 namespace sigmax {
+/// @brief Binance API connector to get binance trading tick data - this is not yet for trading actually
 class BinanceApi
 {
 public:
@@ -25,16 +31,23 @@ public:
         SUCCESS = 0,
         CONNECTION_ERROR = 1,
         SUBSCRIPTION_ERROR = 2,
+        INVALID_MESSAGE = 3,
     };
+
 public:
     BinanceApi(const std::vector<std::string> instruments);
 
     ApiReturn Connect();
-    std::expected<beast::flat_buffer, ApiReturn> Read();
+
+    /// \brief Read a finite amount of BookEvents from binance
+    std::expected<BookDepthUpdate, ApiReturn> DepthUpdate();
+    std::expected<BookInitData, ApiReturn> GetBookInitData();
+
     ApiReturn Close();
 
 private:
     const std::string BuildSubscribeMessage();
+
 private:
     static constexpr const char *kBinanceHost{ "stream.binance.com" };
     static constexpr int kBinancePort{ 9443 };
@@ -46,4 +59,23 @@ private:
 
     const std::vector<std::string> instruments_;
 };
+
+/// \note Helper functions to parse the message
+
+/// \brief Parsing a book event
+/// \details Example message:
+/// {
+///   "e":"depthUpdate",
+///   "E":1786886403206,
+///   "s":"BNBUSDT",
+///   "U":20350592474,
+///   "u":20350592477,
+///   "b":[
+///         ["608.12000000","19.03700000"],
+///         ["608.10000000","24.89700000"]],
+///   "a":[
+///         ["608.19000000","61.90000000"]]}
+std::optional<BookDepthUpdate> ParseBookEvent(const boost::json::value &message);
+std::optional<BidsAsks> ParseBidAsk(const boost::json::array &tuple);
+std::optional<std::int64_t> ParseFixed(const std::string_view &fp_number);
 }// namespace sigmax

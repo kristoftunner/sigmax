@@ -10,7 +10,9 @@ cmake_minimum_required(VERSION 3.15...3.23)
 #    message(FATAL_ERROR "Required config package not found!")
 #    return() # be strictly paranoid for Template Janitor github action! CK
 #endif()
-add_executable(unit_tests mpsc_test.cpp)
+add_executable(unit_tests 
+  mpsc_test.cpp
+  binance_api_test.cpp)
 
 target_link_libraries(unit_tests PRIVATE sigmax::sigmax GTest::gtest_main)
 

@@ -20,8 +20,7 @@ public:
     DBErrorType SaveDbToFile(const std::filesystem::path &filePath);
     // one-copy DB read functions
     std::expected<const std::vector<Order>, DBErrorType> GetOrders(const Symbol &instrumentId);
-    std::expected<const std::vector<Order>, DBErrorType>
-        GetOrders(const Symbol &instrumentId, const Timestamp start, const Timestamp end);
+    std::expected<const std::vector<Order>, DBErrorType> GetOrders(const Symbol &instrumentId, const Timestamp start, const Timestamp end);
 
     DBErrorType AppendCallbackFn(std::function<void(const Order &order)>);
 
