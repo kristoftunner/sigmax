@@ -41,3 +41,8 @@ Thumbs.db
 
 # project specific files
 results
+
+
+# Added by cargo
+
+/target

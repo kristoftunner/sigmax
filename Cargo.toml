@@ -1,0 +1,14 @@
+[package]
+name = "sigmax"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "foo"
+path = "src/lib.rs"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
+[dependencies]
