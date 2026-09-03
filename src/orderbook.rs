@@ -1,3 +1,5 @@
+/// The number is represented as actual value * 1e6, a.k.a [integer digits].[6 fractional digits] in 10s
+/// number space
 #[derive(Debug)]
 struct FixedPointNr {
     integer: i64,
@@ -6,8 +8,8 @@ struct FixedPointNr {
 
 impl FixedPointNr {
     fn from_raw_i64(val: i64) -> FixedPointNr {
-        let integer: i64 = val >> 8;
-        let fractional: i64 = val & 0xff;
+        let integer: i64 = val / 1_000_000;
+        let fractional: i64 = val.clamp(0, 1_000_000);
         FixedPointNr {
             integer,
             fractional,
@@ -16,7 +18,7 @@ impl FixedPointNr {
 }
 
 #[derive(Debug)]
-enum Symbol {
+pub enum Symbol {
     BnbBtc,
     BnbUsdt,
 }
@@ -29,24 +31,36 @@ pub enum OrderType {
 
 #[derive(Debug, Clone)]
 pub struct Order {
-    order_type: OrderType,
+    pub order_type: OrderType,
     /// price, quantity are raw fixed point numbers: 8 fractional and 56 integer bits
     /// value = raw >> 8 + raw && 0xff * 10e8
-    price: i64,
-    quantity: i64,
+    pub price: i64,
+    pub quantity: i64,
 }
 
 #[derive(Debug)]
 pub struct OrderBook {
     symbol: Symbol,
-    timestamp: u64,
+    /// orderbook`s symbol, stock that is tied to
     first_update_id: i64,
+    /// id of the first diff-depth update in the book
     last_update_id: i64,
+    /// id of the last diff-depth update in the book
     bids: Vec<Order>,
     asks: Vec<Order>,
 }
 
 impl OrderBook {
+    pub fn new(symbol: Symbol) -> Self {
+        Self {
+            symbol: symbol,
+            first_update_id: 0,
+            last_update_id: 0,
+            asks: Vec::new(),
+            bids: Vec::new(),
+        }
+    }
+
     pub fn push_order(&mut self, order: &Order) {
         match order.order_type {
             OrderType::Ask => {
@@ -76,18 +90,31 @@ impl OrderBook {
     /// <price>  <quantity>|<price>  <quantity
     pub fn to_ascii_table(&self) -> String {
         // header
-        let header = format!("Bids{:width$}|Asks{:width$}", " ", " ", width = 22);
+        let header = format!("Bids{:width$}|Asks{:width$}\n", " ", " ", width = 24)
+            + format!(
+                "Price{dl:10}Quantity{dl:5}|Price{dl:10}Quantity{dl:5}",
+                dl = " "
+            )
+            .as_str();
 
         let max_lines = std::cmp::max(self.bids.len(), self.asks.len());
         fn format_order(order: &Order) -> String {
             let price: FixedPointNr = FixedPointNr::from_raw_i64(order.price);
-            let (price_int, price_frac) = (price.integer, price.fractional >> 5);
+            let (price_int, price_frac) = (price.integer, price.fractional);
             let qty: FixedPointNr = FixedPointNr::from_raw_i64(order.quantity);
-            let (qty_int, qty_frac) = (qty.integer, qty.fractional >> 5);
-            let formatted_price = format!("{price_int:7}.{price_frac:3}");
-            let formatted_qty = format!("{qty_int:7}.{qty_frac:3}");
-            let bid = format!("{formatted_price:10}  {formatted_qty:10}");
-            bid
+            let (qty_int, qty_frac) = (qty.integer, qty.fractional);
+            let formatted_price = format!("{price_int:7}.{price_frac:<6}")
+                .split_whitespace()
+                .next()
+                .expect("Failed to find number")
+                .to_string();
+            let formatted_qty = format!("{qty_int:7}.{qty_frac:<6}")
+                .split_whitespace()
+                .next()
+                .expect("Failed to find number")
+                .to_string();
+            let order = format!("{formatted_price:<13}  {formatted_qty:<13}");
+            order
         }
 
         // content
@@ -97,13 +124,13 @@ impl OrderBook {
             if idx < self.bids.len() {
                 line += format_order(&self.bids[idx]).as_str();
             } else {
-                line += "".repeat(22).as_str();
+                line += " ".repeat(28).as_str();
             }
             line += "|";
             if idx < self.asks.len() {
                 line += format_order(&self.asks[idx]).as_str();
             } else {
-                line += "".repeat(22).as_str();
+                line += " ".repeat(28).as_str();
             }
             line += "\n";
             content += line.as_str();
